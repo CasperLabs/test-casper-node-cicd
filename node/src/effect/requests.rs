@@ -16,16 +16,18 @@ use casper_execution_engine::{
     core::engine_state::{
         self,
         balance::{BalanceRequest, BalanceResult},
+        era_validators::{GetEraValidatorsError, GetEraValidatorsRequest},
         execute_request::ExecuteRequest,
         execution_result::ExecutionResults,
         genesis::GenesisResult,
         query::{QueryRequest, QueryResult},
+        step::{StepRequest, StepResult},
         upgrade::{UpgradeConfig, UpgradeResult},
     },
     shared::{additive_map::AdditiveMap, transform::Transform},
     storage::global_state::CommitResult,
 };
-use casper_types::{Key, URef};
+use casper_types::{auction::ValidatorWeights, Key, URef};
 
 use super::Responder;
 use crate::{
@@ -482,6 +484,21 @@ pub enum ContractRuntimeRequest {
         /// Responder to call with the balance result.
         responder: Responder<Result<BalanceResult, engine_state::Error>>,
     },
+    /// Returns validator weights for given era.
+    GetEraValidators {
+        /// Get era validators request.
+        get_request: GetEraValidatorsRequest,
+        /// Responder to call with the result.
+        responder: Responder<Result<Option<ValidatorWeights>, GetEraValidatorsError>>,
+    },
+    /// Performs a step consisting of calculating rewards, slashing and running the auction at the
+    /// end of an era.
+    Step {
+        /// The step request.
+        step_request: StepRequest,
+        /// Responder to call with the result.
+        responder: Responder<Result<StepResult, engine_state::Error>>,
+    },
 }
 
 impl Display for ContractRuntimeRequest {
@@ -521,6 +538,14 @@ impl Display for ContractRuntimeRequest {
             ContractRuntimeRequest::GetBalance {
                 balance_request, ..
             } => write!(formatter, "balance request: {:?}", balance_request),
+
+            ContractRuntimeRequest::GetEraValidators { get_request, .. } => {
+                write!(formatter, "get validator weights: {:?}", get_request)
+            }
+
+            ContractRuntimeRequest::Step { step_request, .. } => {
+                write!(formatter, "step: {:?}", step_request)
+            }
         }
     }
 }

@@ -18,7 +18,6 @@ use std::{
 
 use datasize::DataSize;
 use futures::TryFutureExt;
-use rand::{CryptoRng, Rng};
 use semver::Version;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use smallvec::smallvec;
@@ -33,7 +32,8 @@ use crate::{
         EffectBuilder, EffectExt, Effects, Responder,
     },
     protocol::Message,
-    types::{json_compatibility::ExecutionResult, Block, Deploy, Item},
+    types::{json_compatibility::ExecutionResult, Block, CryptoRngCore, Deploy, Item},
+    utils::WithDir,
 };
 use chainspec_store::ChainspecStore;
 pub use config::Config;
@@ -136,7 +136,7 @@ pub trait StorageType {
         &self,
     ) -> Arc<dyn DeployStore<Block = Self::Block, Deploy = Self::Deploy, Value = Self::Deploy>>;
     fn chainspec_store(&self) -> Arc<dyn ChainspecStore>;
-    fn new(config: &Config) -> Result<Self>
+    fn new(config: WithDir<Config>) -> Result<Self>
     where
         Self: Sized;
 
@@ -395,10 +395,9 @@ pub trait StorageType {
     }
 }
 
-impl<REv, R, S> Component<REv, R> for S
+impl<REv, S> Component<REv> for S
 where
     REv: From<NetworkRequest<NodeId, Message>> + Send,
-    R: Rng + CryptoRng + ?Sized,
     S: StorageType,
     Self: Sized + 'static,
 {
@@ -407,7 +406,7 @@ where
     fn handle_event(
         &mut self,
         effect_builder: EffectBuilder<REv>,
-        _rng: &mut R,
+        _rng: &mut dyn CryptoRngCore,
         event: Self::Event,
     ) -> Effects<Self::Event> {
         match event {
@@ -481,7 +480,7 @@ impl<B: Value + 'static, D: Value + Item + 'static> StorageType for InMemStorage
         Arc::clone(&self.chainspec_store) as Arc<dyn ChainspecStore>
     }
 
-    fn new(_config: &Config) -> Result<Self> {
+    fn new(_config: WithDir<Config>) -> Result<Self> {
         Ok(InMemStorage {
             block_store: Arc::new(InMemStore::new()),
             deploy_store: Arc::new(InMemStore::new()),
@@ -507,21 +506,24 @@ impl<B: Value + 'static, D: Value + Item + 'static> StorageType for LmdbStorage<
     type Block = B;
     type Deploy = D;
 
-    fn new(config: &Config) -> Result<Self> {
-        let path = config.path();
-        fs::create_dir_all(&path).map_err(|error| Error::CreateDir {
-            dir: path.display().to_string(),
+    fn new(config: WithDir<Config>) -> Result<Self> {
+        let root = config.with_dir(config.value().path());
+        fs::create_dir_all(&root).map_err(|error| Error::CreateDir {
+            dir: root.display().to_string(),
             source: error,
         })?;
 
-        let block_store_path = path.join(BLOCK_STORE_FILENAME);
-        let deploy_store_path = path.join(DEPLOY_STORE_FILENAME);
-        let chainspec_store_path = path.join(CHAINSPEC_STORE_FILENAME);
+        let block_store_path = root.join(BLOCK_STORE_FILENAME);
+        let deploy_store_path = root.join(DEPLOY_STORE_FILENAME);
+        let chainspec_store_path = root.join(CHAINSPEC_STORE_FILENAME);
 
-        let block_store = LmdbStore::new(block_store_path, config.max_block_store_size())?;
-        let deploy_store = LmdbStore::new(deploy_store_path, config.max_deploy_store_size())?;
-        let chainspec_store =
-            LmdbChainspecStore::new(chainspec_store_path, config.max_chainspec_store_size())?;
+        let block_store = LmdbStore::new(block_store_path, config.value().max_block_store_size())?;
+        let deploy_store =
+            LmdbStore::new(deploy_store_path, config.value().max_deploy_store_size())?;
+        let chainspec_store = LmdbChainspecStore::new(
+            chainspec_store_path,
+            config.value().max_chainspec_store_size(),
+        )?;
 
         Ok(LmdbStorage {
             block_store: Arc::new(block_store),

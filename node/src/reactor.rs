@@ -37,15 +37,16 @@ use std::{
 use datasize::DataSize;
 use futures::{future::BoxFuture, FutureExt};
 use prometheus::{self, IntCounter, Registry};
-use rand::{CryptoRng, Rng};
 use tracing::{debug, debug_span, info, trace, warn};
 use tracing_futures::Instrument;
 
 use crate::{
     effect::{Effect, EffectBuilder, Effects},
+    types::CryptoRngCore,
     utils::{self, WeightedRoundRobin},
 };
 pub use queue_kind::QueueKind;
+use tokio::time::{Duration, Instant};
 
 /// Event scheduler
 ///
@@ -91,7 +92,7 @@ impl<REv> EventQueueHandle<REv> {
 /// Reactor core.
 ///
 /// Any reactor should implement this trait and be executed by the `reactor::run` function.
-pub trait Reactor<R: Rng + CryptoRng + ?Sized>: Sized {
+pub trait Reactor: Sized {
     // Note: We've gone for the `Sized` bound here, since we return an instance in `new`. As an
     // alternative, `new` could return a boxed instance instead, removing this requirement.
 
@@ -114,7 +115,7 @@ pub trait Reactor<R: Rng + CryptoRng + ?Sized>: Sized {
     fn dispatch_event(
         &mut self,
         effect_builder: EffectBuilder<Self::Event>,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
         event: Self::Event,
     ) -> Effects<Self::Event>;
 
@@ -128,7 +129,7 @@ pub trait Reactor<R: Rng + CryptoRng + ?Sized>: Sized {
         cfg: Self::Config,
         registry: &Registry,
         event_queue: EventQueueHandle<Self::Event>,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<(Self, Effects<Self::Event>), Self::Error>;
 
     /// Indicates that the reactor has completed all its work and should no longer dispatch events.
@@ -136,6 +137,9 @@ pub trait Reactor<R: Rng + CryptoRng + ?Sized>: Sized {
     fn is_stopped(&mut self) -> bool {
         false
     }
+
+    /// Instructs the reactor to update performance metrics, if any.
+    fn update_metrics(&mut self) {}
 }
 
 /// A drop-like trait for `async` compatible drop-and-wait.
@@ -156,10 +160,9 @@ pub trait Finalize: Sized {
 /// The runner manages a reactors event queue and reactor itself and can run it either continuously
 /// or in a step-by-step manner.
 #[derive(Debug)]
-pub struct Runner<R, RNG>
+pub struct Runner<R>
 where
-    R: Reactor<RNG>,
-    RNG: Rng + CryptoRng + ?Sized,
+    R: Reactor,
 {
     /// The scheduler used for the reactor.
     scheduler: &'static Scheduler<R::Event>,
@@ -170,8 +173,17 @@ where
     /// Counter for events, to aid tracing.
     event_count: usize,
 
+    /// Timestamp of last reactor metrics update.
+    last_metrics: Instant,
+
     /// Metrics for the runner.
     metrics: RunnerMetrics,
+
+    /// Check if we need to update reactor metrics every this many events.
+    event_metrics_threshold: usize,
+
+    /// Only update reactor metrics if at least this much time has passed.
+    event_metrics_min_delay: Duration,
 }
 
 /// Metric data for the Runner
@@ -205,17 +217,16 @@ impl Drop for RunnerMetrics {
     }
 }
 
-impl<R, RNG> Runner<R, RNG>
+impl<R> Runner<R>
 where
-    R: Reactor<RNG>,
+    R: Reactor,
     R::Error: From<prometheus::Error>,
-    RNG: Rng + CryptoRng + ?Sized,
 {
     /// Creates a new runner from a given configuration.
     ///
     /// Creates a metrics registry that is only going to be used in this runner.
     #[inline]
-    pub async fn new(cfg: R::Config, rng: &mut RNG) -> Result<Self, R::Error> {
+    pub async fn new(cfg: R::Config, rng: &mut dyn CryptoRngCore) -> Result<Self, R::Error> {
         // Instantiate a new registry for metrics for this reactor.
         let registry = Registry::new();
         Self::with_metrics(cfg, rng, &registry).await
@@ -225,7 +236,7 @@ where
     #[inline]
     pub async fn with_metrics(
         cfg: R::Config,
-        rng: &mut RNG,
+        rng: &mut dyn CryptoRngCore,
         registry: &Registry,
     ) -> Result<Self, R::Error> {
         let event_size = mem::size_of::<R::Event>();
@@ -255,6 +266,9 @@ where
             reactor,
             event_count: 0,
             metrics: RunnerMetrics::new(registry)?,
+            last_metrics: Instant::now(),
+            event_metrics_min_delay: Duration::from_secs(30),
+            event_metrics_threshold: 1000,
         })
     }
 
@@ -278,16 +292,28 @@ where
 
     /// Processes a single event on the event queue.
     #[inline]
-    pub async fn crank(&mut self, rng: &mut RNG) {
+    pub async fn crank(&mut self, rng: &mut dyn CryptoRngCore) {
         // Create another span for tracing the processing of one event.
         let crank_span = debug_span!("crank", ev = self.event_count);
         let _inner_enter = crank_span.enter();
 
-        self.event_count += 1;
         self.metrics.events.inc();
 
         let event_queue = EventQueueHandle::new(self.scheduler);
         let effect_builder = EffectBuilder::new(event_queue);
+
+        // Update metrics like memory usage.
+        if self.event_count % self.event_metrics_threshold == 0 {
+            let now = Instant::now();
+
+            // We update metrics on the first very event as well to get a good baseline.
+            if now.duration_since(self.last_metrics) >= self.event_metrics_min_delay
+                || self.event_count == 0
+            {
+                self.reactor.update_metrics();
+                self.last_metrics = now;
+            }
+        }
 
         let (event, q) = self.scheduler.pop().await;
 
@@ -310,12 +336,13 @@ where
         process_effects(self.scheduler, effects)
             .instrument(effect_span)
             .await;
+
         self.event_count += 1;
     }
 
     /// Processes a single event if there is one, returns `None` otherwise.
     #[inline]
-    pub async fn try_crank(&mut self, rng: &mut RNG) -> Option<()> {
+    pub async fn try_crank(&mut self, rng: &mut dyn CryptoRngCore) -> Option<()> {
         if self.scheduler.item_count() == 0 {
             None
         } else {
@@ -326,7 +353,7 @@ where
 
     /// Runs the reactor until `is_stopped()` returns true.
     #[inline]
-    pub async fn run(&mut self, rng: &mut RNG) {
+    pub async fn run(&mut self, rng: &mut dyn CryptoRngCore) {
         while !self.reactor.is_stopped() {
             self.crank(rng).await;
         }

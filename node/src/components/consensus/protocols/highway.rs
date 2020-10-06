@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     collections::{BTreeMap, HashMap},
     fmt::Debug,
     iter,
@@ -6,10 +7,10 @@ use std::{
 };
 
 use anyhow::Error;
+use datasize::DataSize;
 use itertools::Itertools;
-use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::{
     components::consensus::{
@@ -27,11 +28,14 @@ use crate::{
         asymmetric_key::{self, PublicKey, SecretKey, Signature},
         hash::{self, Digest},
     },
-    types::{ProtoBlock, Timestamp},
+    types::{CryptoRngCore, ProtoBlock, Timestamp},
 };
 
-#[derive(Debug)]
-pub(crate) struct HighwayProtocol<I, C: Context> {
+#[derive(DataSize, Debug)]
+pub(crate) struct HighwayProtocol<I, C>
+where
+    C: Context,
+{
     /// Incoming vertices we can't add yet because they are still missing a dependency.
     vertex_deps: BTreeMap<Dependency<C>, Vec<(I, PreValidatedVertex<C>)>>,
     /// Incoming blocks we can't add yet because we are waiting for validation.
@@ -106,10 +110,10 @@ impl<I: NodeIdT, C: Context> HighwayProtocol<I, C> {
 
     /// Adds the given vertices to the protocol state, if possible, or requests missing
     /// dependencies or validation. Recursively adds everything that is unblocked now.
-    fn add_vertices<R: Rng + CryptoRng + ?Sized>(
+    fn add_vertices(
         &mut self,
         mut pvvs: Vec<(I, PreValidatedVertex<C>)>,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Vec<CpResult<I, C>> {
         // TODO: Is there a danger that this takes too much time, and starves other
         // components and events? Consider replacing the loop with a "callback" effect:
@@ -171,11 +175,15 @@ impl<I: NodeIdT, C: Context> HighwayProtocol<I, C> {
         results
     }
 
-    fn add_valid_vertex<R>(&mut self, vv: ValidVertex<C>, rng: &mut R) -> Vec<CpResult<I, C>>
-    where
-        R: Rng + CryptoRng + ?Sized,
-    {
+    fn add_valid_vertex(
+        &mut self,
+        vv: ValidVertex<C>,
+        rng: &mut dyn CryptoRngCore,
+    ) -> Vec<CpResult<I, C>> {
+        let start_time = Timestamp::now();
         let av_effects = self.highway.add_valid_vertex(vv.clone(), rng);
+        let elapsed = start_time.elapsed();
+        trace!(%elapsed, "added valid vertex");
         let mut results = self.process_av_effects(av_effects);
         let msg = HighwayMessage::NewVertex(vv.into());
         results.push(ConsensusProtocolResult::CreatedGossipMessage(
@@ -210,17 +218,16 @@ enum HighwayMessage<C: Context> {
 type CpResult<I, C> =
     ConsensusProtocolResult<I, <C as Context>::ConsensusValue, <C as Context>::ValidatorId>;
 
-impl<I, C, R> ConsensusProtocol<I, C::ConsensusValue, C::ValidatorId, R> for HighwayProtocol<I, C>
+impl<I, C> ConsensusProtocol<I, C::ConsensusValue, C::ValidatorId> for HighwayProtocol<I, C>
 where
     I: NodeIdT,
-    C: Context,
-    R: Rng + CryptoRng + ?Sized,
+    C: Context + 'static,
 {
     fn handle_message(
         &mut self,
         sender: I,
         msg: Vec<u8>,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<CpResult<I, C>>, Error> {
         match rmp_serde::from_read_ref(msg.as_slice()) {
             Err(err) => Ok(vec![ConsensusProtocolResult::InvalidIncomingMessage(
@@ -262,7 +269,7 @@ where
     fn handle_timer(
         &mut self,
         timestamp: Timestamp,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<CpResult<I, C>>, Error> {
         let effects = self.highway.handle_timer(timestamp, rng);
         Ok(self.process_av_effects(effects))
@@ -272,18 +279,17 @@ where
         &mut self,
         value: C::ConsensusValue,
         block_context: BlockContext,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<CpResult<I, C>>, Error> {
         let effects = self.highway.propose(value, block_context, rng);
         Ok(self.process_av_effects(effects))
     }
 
-    /// Marks `value` as valid.
     fn resolve_validity(
         &mut self,
         value: &C::ConsensusValue,
         valid: bool,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<CpResult<I, C>>, Error> {
         if valid {
             let mut results = self
@@ -305,9 +311,12 @@ where
         }
     }
 
-    /// Turns this instance into a passive observer, that does not create any new vertices.
     fn deactivate_validator(&mut self) {
         self.highway.deactivate_validator()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -329,7 +338,7 @@ impl ValidatorSecret for HighwaySecret {
     type Hash = Digest;
     type Signature = Signature;
 
-    fn sign<R: Rng + CryptoRng + ?Sized>(&self, hash: &Digest, rng: &mut R) -> Signature {
+    fn sign(&self, hash: &Digest, rng: &mut dyn CryptoRngCore) -> Signature {
         asymmetric_key::sign(hash, self.secret_key.as_ref(), &self.public_key, rng)
     }
 }

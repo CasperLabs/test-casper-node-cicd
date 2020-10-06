@@ -7,6 +7,7 @@
 
 use std::{
     collections::HashMap,
+    convert::TryInto,
     fmt::{self, Debug, Formatter},
     rc::Rc,
 };
@@ -16,15 +17,20 @@ use blake2::{
     digest::{Input, VariableOutput},
     VarBlake2b,
 };
-use casper_types::U512;
 use datasize::DataSize;
 use fmt::Display;
 use num_traits::AsPrimitive;
-use rand::{CryptoRng, Rng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 
-use casper_execution_engine::shared::motes::Motes;
+use casper_execution_engine::{
+    core::engine_state::era_validators::GetEraValidatorsRequest, shared::motes::Motes,
+};
+use casper_types::{
+    auction::{ValidatorWeights, BLOCK_REWARD},
+    ProtocolVersion, U512,
+};
 
 use crate::{
     components::{
@@ -45,13 +51,10 @@ use crate::{
         hash,
     },
     effect::{EffectBuilder, EffectExt, Effects, Responder},
-    types::{BlockHeader, FinalizedBlock, ProtoBlock, SystemTransaction, Timestamp},
+    types::{BlockHeader, CryptoRngCore, FinalizedBlock, ProtoBlock, Timestamp},
     utils::WithDir,
 };
 
-// We use one trillion as a block reward unit because it's large enough to allow precise
-// fractions, and small enough for many block rewards to fit into a u64.
-const BLOCK_REWARD: u64 = 1_000_000_000_000;
 /// The number of recent eras to retain. Eras older than this are dropped from memory.
 // TODO: This needs to be in sync with AUCTION_DELAY/booking_duration_millis. (Already duplicated!)
 const RETAIN_ERAS: u64 = 4;
@@ -80,40 +83,65 @@ impl Display for EraId {
     }
 }
 
-pub struct Era<I, R: Rng + CryptoRng + ?Sized> {
+pub struct Era<I> {
     /// The consensus protocol instance.
-    consensus: Box<dyn ConsensusProtocol<I, ProtoBlock, PublicKey, R>>,
+    consensus: Box<dyn ConsensusProtocol<I, ProtoBlock, PublicKey>>,
     /// The height of this era's first block.
     start_height: u64,
 }
 
-#[derive(DataSize)]
-pub struct EraSupervisor<I, R>
+impl<I> DataSize for Era<I>
 where
-    R: Rng + CryptoRng + ?Sized,
+    I: 'static,
 {
+    const IS_DYNAMIC: bool = true;
+
+    const STATIC_HEAP_SIZE: usize = 0;
+
+    #[inline]
+    fn estimate_heap_size(&self) -> usize {
+        // `DataSize` cannot be made object safe due its use of associated constants. We implement
+        // it manually here, downcasting the consensus protocol as a workaround.
+
+        let consensus_heap_size = {
+            let any_ref = self.consensus.as_any();
+
+            if let Some(highway) = any_ref.downcast_ref::<HighwayProtocol<I, HighwayContext>>() {
+                highway.estimate_heap_size()
+            } else {
+                warn!(
+                    "could not downcast consensus protocol to HighwayProtocol<I, HighwayContext> to determine heap allocation size"
+                );
+                0
+            }
+        };
+
+        consensus_heap_size + self.start_height.estimate_heap_size()
+    }
+}
+
+#[derive(DataSize)]
+pub struct EraSupervisor<I> {
     /// A map of active consensus protocols.
     /// A value is a trait so that we can run different consensus protocol instances per era.
-    active_eras: HashMap<EraId, Era<I, R>>,
+    active_eras: HashMap<EraId, Era<I>>,
     pub(super) secret_signing_key: Rc<SecretKey>,
     pub(super) public_signing_key: PublicKey,
-    validator_stakes: Vec<(PublicKey, Motes)>,
     current_era: EraId,
     chainspec: Chainspec,
     node_start_time: Timestamp,
 }
 
-impl<I, R: Rng + CryptoRng + ?Sized> Debug for EraSupervisor<I, R> {
+impl<I> Debug for EraSupervisor<I> {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         let ae: Vec<_> = self.active_eras.keys().collect();
         write!(formatter, "EraSupervisor {{ active_eras: {:?}, .. }}", ae)
     }
 }
 
-impl<I, R> EraSupervisor<I, R>
+impl<I> EraSupervisor<I>
 where
     I: NodeIdT,
-    R: Rng + CryptoRng + ?Sized,
 {
     /// Creates a new `EraSupervisor`, starting in era 0.
     pub(crate) fn new<REv: ReactorEventT<I>>(
@@ -123,7 +151,7 @@ where
         validator_stakes: Vec<(PublicKey, Motes)>,
         chainspec: &Chainspec,
         genesis_post_state_hash: hash::Digest,
-        rng: &mut R,
+        mut rng: &mut dyn CryptoRngCore,
     ) -> Result<(Self, Effects<Event<I>>), Error> {
         let (root, config) = config.into_parts();
         let secret_signing_key = Rc::new(config.secret_key_path.load(root)?);
@@ -134,7 +162,6 @@ where
             secret_signing_key,
             public_signing_key,
             current_era: EraId(0),
-            validator_stakes: validator_stakes.clone(),
             chainspec: chainspec.clone(),
             node_start_time: Timestamp::now(),
         };
@@ -148,7 +175,7 @@ where
             genesis_post_state_hash,
         );
         let effects = era_supervisor
-            .handling_wrapper(effect_builder, rng)
+            .handling_wrapper(effect_builder, &mut rng)
             .handle_consensus_results(EraId(0), results);
 
         Ok((era_supervisor, effects))
@@ -159,8 +186,8 @@ where
     pub(super) fn handling_wrapper<'a, REv: ReactorEventT<I>>(
         &'a mut self,
         effect_builder: EffectBuilder<REv>,
-        rng: &'a mut R,
-    ) -> EraSupervisorHandlingWrapper<'a, I, REv, R> {
+        rng: &'a mut dyn CryptoRngCore,
+    ) -> EraSupervisorHandlingWrapper<'a, I, REv> {
         EraSupervisorHandlingWrapper {
             era_supervisor: self,
             effect_builder,
@@ -241,15 +268,11 @@ where
         let ftt = validators.total_weight()
             * u64::from(self.highway_config().finality_threshold_percent)
             / 100;
-        // The number of rounds after which a block reward is paid out.
-        // TODO: Make this configurable?
-        let reward_delay = 8;
         // TODO: The initial round length should be the observed median of the switch block.
         let params = Params::new(
             0, // TODO: get a proper seed.
             BLOCK_REWARD,
             BLOCK_REWARD / 5, // TODO: Make reduced block reward configurable?
-            reward_delay,
             self.highway_config().minimum_round_exponent,
             self.highway_config().minimum_era_height,
             start_time + self.highway_config().era_duration,
@@ -277,6 +300,19 @@ where
             highway.activate_validator(our_id, secret, timestamp.max(start_time))
         } else {
             info!("not voting in era {}", era_id.0);
+            if start_time >= self.node_start_time {
+                info!(
+                    "node was started at time {}, which is not earlier than the era start {}",
+                    self.node_start_time, start_time
+                );
+            } else if min_end_time < timestamp {
+                info!(
+                    "era started too long ago ({}; earliest end {}), current timestamp {}",
+                    start_time, min_end_time, timestamp
+                );
+            } else {
+                info!("not a validator; our ID: {}", our_id);
+            }
             Vec::new()
         };
 
@@ -295,7 +331,7 @@ where
     }
 
     /// Returns the current era.
-    fn current_era_mut(&mut self) -> &mut Era<I, R> {
+    fn current_era_mut(&mut self) -> &mut Era<I> {
         self.active_eras
             .get_mut(&self.current_era)
             .expect("current era does not exist")
@@ -303,7 +339,7 @@ where
 
     /// Inspect the active eras.
     #[cfg(test)]
-    pub(crate) fn active_eras(&self) -> &HashMap<EraId, Era<I, R>> {
+    pub(crate) fn active_eras(&self) -> &HashMap<EraId, Era<I>> {
         &self.active_eras
     }
 }
@@ -313,24 +349,23 @@ where
 /// This is a short-lived convenience type to avoid passing the effect builder through lots of
 /// message calls, and making every method individually generic in `REv`. It is only instantiated
 /// for the duration of handling a single event.
-pub(super) struct EraSupervisorHandlingWrapper<'a, I, REv: 'static, R: Rng + CryptoRng + ?Sized> {
-    pub(super) era_supervisor: &'a mut EraSupervisor<I, R>,
+pub(super) struct EraSupervisorHandlingWrapper<'a, I, REv: 'static> {
+    pub(super) era_supervisor: &'a mut EraSupervisor<I>,
     pub(super) effect_builder: EffectBuilder<REv>,
-    pub(super) rng: &'a mut R,
+    pub(super) rng: &'a mut dyn CryptoRngCore,
 }
 
-impl<'a, I, REv, R> EraSupervisorHandlingWrapper<'a, I, REv, R>
+impl<'a, I, REv> EraSupervisorHandlingWrapper<'a, I, REv>
 where
     I: NodeIdT,
     REv: ReactorEventT<I>,
-    R: Rng + CryptoRng + ?Sized,
 {
     /// Applies `f` to the consensus protocol of the specified era.
     fn delegate_to_era<F>(&mut self, era_id: EraId, f: F) -> Effects<Event<I>>
     where
         F: FnOnce(
-            &mut dyn ConsensusProtocol<I, ProtoBlock, PublicKey, R>,
-            &mut R,
+            &mut dyn ConsensusProtocol<I, ProtoBlock, PublicKey>,
+            &mut dyn CryptoRngCore,
         ) -> Result<Vec<ConsensusProtocolResult<I, ProtoBlock, PublicKey>>, Error>,
     {
         match self.era_supervisor.active_eras.get_mut(&era_id) {
@@ -403,24 +438,60 @@ where
             return effects;
         }
         if block_header.switch_block() {
-            // TODO: Learn the new weights from contract (validator rotation).
-            let validator_stakes = self.era_supervisor.validator_stakes.clone();
-            self.era_supervisor
-                .current_era_mut()
-                .consensus
-                .deactivate_validator();
-            let new_era_id = block_header.era_id().successor();
-            info!(?new_era_id, "Era created");
-            let results = self.era_supervisor.new_era(
-                new_era_id,
-                Timestamp::now(), // TODO: This should be passed in.
-                validator_stakes,
-                block_header.timestamp(),
-                block_header.height() + 1,
-                *block_header.global_state_hash(),
+            // if the block is a switch block, we have to get the validators for the new era and
+            // create it, before we can say we handled the block
+            let request = GetEraValidatorsRequest::new(
+                (*block_header.global_state_hash()).into(),
+                block_header.era_id().successor().0,
+                ProtocolVersion::V1_0_0,
             );
-            effects.extend(self.handle_consensus_results(new_era_id, results));
+            effects.extend(self.effect_builder.get_validators(request).event(|result| {
+                Event::GetValidatorsResponse {
+                    block_header: Box::new(block_header),
+                    get_validators_result: result,
+                }
+            }));
+        } else {
+            // if it's not a switch block, we can already declare it handled
+            effects.extend(
+                self.effect_builder
+                    .announce_block_handled(block_header)
+                    .ignore(),
+            );
         }
+        effects
+    }
+
+    pub(super) fn handle_get_validators_response(
+        &mut self,
+        block_header: BlockHeader,
+        validator_weights: ValidatorWeights,
+    ) -> Effects<Event<I>> {
+        let validator_stakes = validator_weights
+            .into_iter()
+            .filter_map(|(key, stake)| match key.try_into() {
+                Ok(key) => Some((key, Motes::new(stake))),
+                Err(error) => {
+                    warn!(%error, "error converting the bonded key: {:?}", error);
+                    None
+                }
+            })
+            .collect();
+        self.era_supervisor
+            .current_era_mut()
+            .consensus
+            .deactivate_validator();
+        let new_era_id = block_header.era_id().successor();
+        info!(?new_era_id, "Era created");
+        let results = self.era_supervisor.new_era(
+            new_era_id,
+            Timestamp::now(), // TODO: This should be passed in.
+            validator_stakes,
+            block_header.timestamp(),
+            block_header.height() + 1,
+            *block_header.global_state_hash(),
+        );
+        let mut effects = self.handle_consensus_results(new_era_id, results);
         effects.extend(
             self.effect_builder
                 .announce_block_handled(block_header)
@@ -472,12 +543,10 @@ where
         consensus_result: ConsensusProtocolResult<I, ProtoBlock, PublicKey>,
     ) -> Effects<Event<I>> {
         match consensus_result {
-            ConsensusProtocolResult::InvalidIncomingMessage(msg, sender, error) => {
+            ConsensusProtocolResult::InvalidIncomingMessage(_, sender, error) => {
                 // TODO: we will probably want to disconnect from the sender here
-                // TODO: Print a more readable representation of the message.
                 error!(
-                    ?msg,
-                    ?sender,
+                    %sender,
                     ?error,
                     "invalid incoming message to consensus instance"
                 );
@@ -509,37 +578,26 @@ where
                 }),
             ConsensusProtocolResult::FinalizedBlock(CpFinalizedBlock {
                 value: proto_block,
-                new_equivocators,
-                rewards,
                 timestamp,
                 height,
-                terminal,
+                era_end,
                 proposer,
             }) => {
-                // Announce the finalized proto block.
-                let mut effects = self
-                    .effect_builder
-                    .announce_finalized_proto_block(proto_block.clone())
-                    .ignore();
-                // Create instructions for slashing equivocators.
-                let mut system_transactions: Vec<_> = new_equivocators
-                    .into_iter()
-                    .map(SystemTransaction::Slash)
-                    .collect();
-                if !rewards.is_empty() {
-                    system_transactions.push(SystemTransaction::Rewards(rewards));
-                };
-                let fb = FinalizedBlock::new(
+                let finalized_block = FinalizedBlock::new(
                     proto_block,
                     timestamp,
-                    system_transactions,
-                    terminal,
+                    era_end,
                     era_id,
                     self.era_supervisor.active_eras[&era_id].start_height + height,
                     proposer,
                 );
+                // Announce the finalized proto block.
+                let mut effects = self
+                    .effect_builder
+                    .announce_finalized_block(finalized_block.clone())
+                    .ignore();
                 // Request execution of the finalized block.
-                effects.extend(self.effect_builder.execute_block(fb).ignore());
+                effects.extend(self.effect_builder.execute_block(finalized_block).ignore());
                 effects
             }
             ConsensusProtocolResult::ValidateConsensusValue(sender, proto_block) => self

@@ -1,10 +1,13 @@
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{any::Any, collections::BTreeMap, fmt::Debug};
 
 use anyhow::Error;
 use datasize::DataSize;
-use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
-use crate::{components::consensus::traits::ConsensusValueT, types::Timestamp};
+use crate::{
+    components::consensus::traits::ConsensusValueT,
+    types::{CryptoRngCore, Timestamp},
+};
 
 /// Information about the context in which a new block is created.
 #[derive(Clone, DataSize, Eq, PartialEq, Debug, Ord, PartialOrd)]
@@ -32,6 +35,22 @@ impl BlockContext {
     }
 }
 
+/// Equivocation and reward information to be included in the terminal finalized block.
+#[derive(Clone, DataSize, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "VID: Ord + Serialize",
+    deserialize = "VID: Ord + Deserialize<'de>",
+))]
+pub struct EraEnd<VID> {
+    /// The set of equivocators.
+    pub(crate) equivocators: Vec<VID>,
+    /// Rewards for finalization of earlier blocks.
+    ///
+    /// This is a measure of the value of each validator's contribution to consensus, in
+    /// fractions of the configured maximum block reward.
+    pub(crate) rewards: BTreeMap<VID, u64>,
+}
+
 /// A finalized block. All nodes are guaranteed to see the same sequence of blocks, and to agree
 /// about all the information contained in this type, as long as the total weight of faulty
 /// validators remains below the threshold.
@@ -39,19 +58,13 @@ impl BlockContext {
 pub(crate) struct FinalizedBlock<C: ConsensusValueT, VID> {
     /// The finalized value.
     pub(crate) value: C,
-    /// The set of newly detected equivocators.
-    pub(crate) new_equivocators: Vec<VID>,
-    /// Rewards for finalization of earlier blocks.
-    ///
-    /// This is a measure of the value of each validator's contribution to consensus, in
-    /// fractions of the configured maximum block reward.
-    pub(crate) rewards: BTreeMap<VID, u64>,
     /// The timestamp at which this value was proposed.
     pub(crate) timestamp: Timestamp,
     /// The relative height in this instance of the protocol.
     pub(crate) height: u64,
-    /// Whether this is a terminal block, i.e. the last one to be finalized.
-    pub(crate) terminal: bool,
+    /// If this is a terminal block, i.e. the last one to be finalized, this includes reward and
+    /// equivocator information.
+    pub(crate) era_end: Option<EraEnd<VID>>,
     /// Proposer of this value
     pub(crate) proposer: VID,
 }
@@ -79,20 +92,25 @@ pub(crate) enum ConsensusProtocolResult<I, C: ConsensusValueT, VID> {
 }
 
 /// An API for a single instance of the consensus.
-pub(crate) trait ConsensusProtocol<I, C: ConsensusValueT, VID, R: Rng + CryptoRng + ?Sized> {
+pub(crate) trait ConsensusProtocol<I, C: ConsensusValueT, VID> {
+    /// Upcasts consensus protocol into `dyn Any`.
+    ///
+    /// Typically called on a boxed trait object for downcasting afterwards.
+    fn as_any(&self) -> &dyn Any;
+
     /// Handles an incoming message (like NewVote, RequestDependency).
     fn handle_message(
         &mut self,
         sender: I,
         msg: Vec<u8>,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<ConsensusProtocolResult<I, C, VID>>, Error>;
 
     /// Triggers consensus' timer.
     fn handle_timer(
         &mut self,
-        timerstamp: Timestamp,
-        rng: &mut R,
+        timestamp: Timestamp,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<ConsensusProtocolResult<I, C, VID>>, Error>;
 
     /// Proposes a new value for consensus.
@@ -100,7 +118,7 @@ pub(crate) trait ConsensusProtocol<I, C: ConsensusValueT, VID, R: Rng + CryptoRn
         &mut self,
         value: C,
         block_context: BlockContext,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<ConsensusProtocolResult<I, C, VID>>, Error>;
 
     /// Marks the `value` as valid or invalid, based on validation requested via
@@ -109,7 +127,7 @@ pub(crate) trait ConsensusProtocol<I, C: ConsensusValueT, VID, R: Rng + CryptoRn
         &mut self,
         value: &C,
         valid: bool,
-        rng: &mut R,
+        rng: &mut dyn CryptoRngCore,
     ) -> Result<Vec<ConsensusProtocolResult<I, C, VID>>, Error>;
 
     /// Turns this instance into a passive observer, that does not create any new vertices.

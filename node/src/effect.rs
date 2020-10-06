@@ -77,17 +77,19 @@ use smallvec::{smallvec, SmallVec};
 use tracing::error;
 
 use casper_execution_engine::{
-    core::{
-        engine_state::{
-            self, execute_request::ExecuteRequest, execution_result::ExecutionResults,
-            genesis::GenesisResult, BalanceRequest, BalanceResult, QueryRequest, QueryResult,
-        },
-        execution,
+    core::engine_state::{
+        self,
+        era_validators::{GetEraValidatorsError, GetEraValidatorsRequest},
+        execute_request::ExecuteRequest,
+        execution_result::ExecutionResults,
+        genesis::GenesisResult,
+        step::{StepRequest, StepResult},
+        BalanceRequest, BalanceResult, QueryRequest, QueryResult,
     },
     shared::{additive_map::AdditiveMap, transform::Transform},
     storage::global_state::CommitResult,
 };
-use casper_types::Key;
+use casper_types::{auction::ValidatorWeights, Key};
 
 use crate::{
     components::{
@@ -99,10 +101,7 @@ use crate::{
             DeployHashes, DeployHeaderResults, DeployMetadata, DeployResults, StorageType, Value,
         },
     },
-    crypto::{
-        asymmetric_key::{PublicKey, Signature},
-        hash::Digest,
-    },
+    crypto::{asymmetric_key::Signature, hash::Digest},
     reactor::{EventQueueHandle, QueueKind},
     types::{
         json_compatibility::ExecutionResult, Block, BlockByHeight, BlockHash, BlockHeader,
@@ -113,7 +112,7 @@ use crate::{
 };
 use announcements::{
     ApiServerAnnouncement, BlockExecutorAnnouncement, ConsensusAnnouncement,
-    DeployAcceptorAnnouncement, GossiperAnnouncement, NetworkAnnouncement,
+    DeployAcceptorAnnouncement, GossiperAnnouncement, LinearChainAnnouncement, NetworkAnnouncement,
 };
 use requests::{
     BlockExecutorRequest, BlockValidationRequest, ChainspecLoaderRequest, ConsensusRequest,
@@ -886,13 +885,13 @@ impl<REv> EffectBuilder<REv> {
     }
 
     /// Announces that a proto block has been finalized.
-    pub(crate) async fn announce_finalized_proto_block(self, proto_block: ProtoBlock)
+    pub(crate) async fn announce_finalized_block(self, finalized_block: FinalizedBlock)
     where
         REv: From<ConsensusAnnouncement>,
     {
         self.0
             .schedule(
-                ConsensusAnnouncement::Finalized(proto_block),
+                ConsensusAnnouncement::Finalized(Box::new(finalized_block)),
                 QueueKind::Regular,
             )
             .await
@@ -919,6 +918,22 @@ impl<REv> EffectBuilder<REv> {
         self.0
             .schedule(
                 ConsensusAnnouncement::Handled(Box::new(block_header)),
+                QueueKind::Regular,
+            )
+            .await
+    }
+
+    /// The linear chain has stored a newly-created block.
+    pub(crate) async fn announce_block_added(self, block_hash: BlockHash, block_header: BlockHeader)
+    where
+        REv: From<LinearChainAnnouncement>,
+    {
+        self.0
+            .schedule(
+                LinearChainAnnouncement::BlockAdded {
+                    block_hash,
+                    block_header: Box::new(block_header),
+                },
                 QueueKind::Regular,
             )
             .await
@@ -1057,21 +1072,39 @@ impl<REv> EffectBuilder<REv> {
     /// Returns a map of validators for given `era` to their weights as known from `root_hash`.
     ///
     /// This operation is read only.
-    #[allow(dead_code)]
     pub(crate) async fn get_validators(
         self,
-        _root_hash: Digest,
-        _era: u64,
-    ) -> Result<Option<HashMap<PublicKey, u64>>, execution::Error> {
-        todo!("get_validators")
+        get_request: GetEraValidatorsRequest,
+    ) -> Result<Option<ValidatorWeights>, GetEraValidatorsError>
+    where
+        REv: From<ContractRuntimeRequest>,
+    {
+        self.make_request(
+            |responder| ContractRuntimeRequest::GetEraValidators {
+                get_request,
+                responder,
+            },
+            QueueKind::Regular,
+        )
+        .await
     }
 
-    /// Runs auction using the system smart contract.
-    ///
-    /// Contract is ran on a given pre state hash and returns fully committed post state hash.
-    #[allow(dead_code)]
-    pub(crate) async fn run_auction(self, _root_hash: Digest) -> Result<Digest, execution::Error> {
-        todo!("run_auction")
+    /// Runs the end of era step using the system smart contract.
+    pub(crate) async fn run_step(
+        self,
+        step_request: StepRequest,
+    ) -> Result<StepResult, engine_state::Error>
+    where
+        REv: From<ContractRuntimeRequest>,
+    {
+        self.make_request(
+            |responder| ContractRuntimeRequest::Step {
+                step_request,
+                responder,
+            },
+            QueueKind::Regular,
+        )
+        .await
     }
 
     /// Request consensus to sign a block from the linear chain and possibly start a new era.

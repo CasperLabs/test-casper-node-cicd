@@ -5,9 +5,6 @@ use std::time::Duration;
 use datasize::DataSize;
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use crate::utils::format_address;
-
 /// Default binding address.
 ///
 /// Uses a fixed port per node, but binds on any interface.
@@ -41,7 +38,7 @@ impl Default for Config {
 pub struct Config {
     /// Address to bind to.
     pub bind_address: String,
-    /// Publically advertised address, in case the node has a different external IP.
+    /// Publicly advertised address, in case the node has a different external IP.
     ///
     /// If the port is specified as `0`, it will be replaced with the actually bound port.
     pub public_address: String,
@@ -84,9 +81,11 @@ impl Config {
     /// Constructs a `Config` suitable for use by a node joining a testnet on a single machine.
     pub(crate) fn default_local_net(known_peer_port: u16) -> Self {
         Config {
-            bind_address: format_address(TEST_BIND_INTERFACE, 0),
-            public_address: format_address(TEST_BIND_INTERFACE, 0),
-            known_addresses: vec![format_address(TEST_BIND_INTERFACE, known_peer_port)],
+            bind_address: SocketAddr::from((TEST_BIND_INTERFACE, 0)).to_string(),
+            public_address: SocketAddr::from((TEST_BIND_INTERFACE, 0)).to_string(),
+            known_addresses: vec![
+                SocketAddr::from((TEST_BIND_INTERFACE, known_peer_port)).to_string()
+            ],
             gossip_interval: DEFAULT_TEST_GOSSIP_INTERVAL,
             systemd_support: false,
         }

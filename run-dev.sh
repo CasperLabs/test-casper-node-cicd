@@ -7,23 +7,24 @@ set -eu
 BASEDIR=$(readlink -f $(dirname $0))
 CHAINSPEC=$(mktemp -t chainspec_XXXXXXXX --suffix .toml)
 TRUSTED_HASH="${TRUSTED_HASH:-}"
-OFFSET="${OFFSET:-30}"
-TIMESTAMP=${GENESIS_TIMESTAMP:-$(date '+%s000' -d "+$OFFSET sec")}
-echo "GENESIS_TIMESTAMP="$TIMESTAMP
-date -d @$(echo "$TIMESTAMP/1000" | bc)
+
+# Generate a genesis timestamp 30 seconds into the future, unless explicity given a different one.
+TIMESTAMP=$(python3 -c 'from datetime import datetime, timedelta; print((datetime.utcnow() + timedelta(seconds=20)).isoformat("T") + "Z")') 
+TIMESTAMP=${GENESIS_TIMESTAMP:-$TIMESTAMP}
+
+echo "GENESIS_TIMESTAMP=${TIMESTAMP}"
 
 # Build the node first, so that `sleep` in the loop has an effect.
 cargo build -p casper-node
 
 # Update the chainspec to use the current time as the genesis timestamp.
 cp ${BASEDIR}/resources/local/chainspec.toml ${CHAINSPEC}
-sed -i "s/^\([[:alnum:]_]*timestamp\) = .*/\1 = ${TIMESTAMP}/" ${CHAINSPEC}
+sed -i "s/^\([[:alnum:]_]*timestamp\) = .*/\1 = \"${TIMESTAMP}\"/" ${CHAINSPEC}
 sed -i 's|\.\./\.\.|'"$BASEDIR"'|' ${CHAINSPEC}
 sed -i 's|accounts\.csv|'"$BASEDIR"'/resources/local/accounts.csv|' ${CHAINSPEC}
 
-ARGS="$@"
 # If no nodes defined, start all.
-NODES="${ARGS:-1 2 3 4 5}"
+NODES="${@:-1 2 3 4 5}"
 
 run_node() {
     ID=$1
@@ -85,10 +86,8 @@ run_node() {
     sleep 1;
 }
 
-for i in 1 2 3 4 5; do
-    case "$NODES" in
-        *"$i"*) run_node $i
-    esac
+for i in $NODES; do
+    run_node $i
 done;
 
 echo "Test network starting."

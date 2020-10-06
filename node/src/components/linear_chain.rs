@@ -7,18 +7,21 @@ use std::{
 use datasize::DataSize;
 use derive_more::From;
 use futures::FutureExt;
-use rand::{CryptoRng, Rng};
 use tracing::{debug, error, info, warn};
 
 use super::{storage::Storage, Component};
 use crate::{
     crypto::asymmetric_key::Signature,
     effect::{
+        announcements::LinearChainAnnouncement,
         requests::{ConsensusRequest, LinearChainRequest, NetworkRequest, StorageRequest},
         EffectExt, Effects,
     },
     protocol::Message,
-    types::{json_compatibility::ExecutionResult, Block, BlockByHeight, BlockHash, DeployHash},
+    types::{
+        json_compatibility::ExecutionResult, Block, BlockByHeight, BlockHash, CryptoRngCore,
+        DeployHash,
+    },
 };
 
 #[derive(Debug, From)]
@@ -94,13 +97,13 @@ impl<I> LinearChain<I> {
     }
 }
 
-impl<I, REv, R> Component<REv, R> for LinearChain<I>
+impl<I, REv> Component<REv> for LinearChain<I>
 where
     REv: From<StorageRequest<Storage>>
         + From<ConsensusRequest>
         + From<NetworkRequest<I, Message>>
+        + From<LinearChainAnnouncement>
         + Send,
-    R: Rng + CryptoRng + ?Sized,
     I: Display + Send + 'static,
 {
     type Event = Event<I>;
@@ -108,7 +111,7 @@ where
     fn handle_event(
         &mut self,
         effect_builder: crate::effect::EffectBuilder<REv>,
-        _rng: &mut R,
+        _rng: &mut dyn CryptoRngCore,
         event: Self::Event,
     ) -> Effects<Self::Event> {
         match event {
@@ -161,13 +164,13 @@ where
                 info!(?block_hash, ?era_id, ?height, "Linear chain block stored.");
                 let mut effects = effect_builder.put_execution_results_to_storage(block_hash, execution_results).ignore();
                 effects.extend(
-                    effect_builder.handle_linear_chain_block(block_header)
+                    effect_builder.handle_linear_chain_block(block_header.clone())
                     .event(move |signature| Event::NewFinalitySignature(block_hash, signature)));
+                effects.extend(effect_builder.announce_block_added(block_hash, block_header).ignore());
                 effects
             },
             Event::NewFinalitySignature(block_hash, signature) => {
                 effect_builder
-                .clone()
                     .get_block_from_storage(block_hash)
                     .then(move |maybe_block| match maybe_block {
                         Some(mut block) => {

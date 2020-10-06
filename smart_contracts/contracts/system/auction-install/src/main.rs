@@ -10,11 +10,12 @@ use casper_contract::{
 };
 use casper_types::{
     auction::{
-        Bid, BidPurses, Bids, Delegators, EraValidators, SeigniorageRecipient,
-        SeigniorageRecipients, SeigniorageRecipientsSnapshot, UnbondingPurses, ValidatorWeights,
-        AUCTION_DELAY, BIDS_KEY, BID_PURSES_KEY, DEFAULT_LOCKED_FUNDS_PERIOD, DELEGATORS_KEY,
-        ERA_ID_KEY, ERA_VALIDATORS_KEY, INITIAL_ERA_ID, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
-        UNBONDING_PURSES_KEY,
+        Bid, BidPurses, Bids, DelegatorRewardMap, Delegators, EraValidators, SeigniorageRecipient,
+        SeigniorageRecipients, SeigniorageRecipientsSnapshot, UnbondingPurses, ValidatorRewardMap,
+        ValidatorWeights, AUCTION_DELAY, BIDS_KEY, BID_PURSES_KEY, DEFAULT_LOCKED_FUNDS_PERIOD,
+        DELEGATORS_KEY, DELEGATOR_REWARD_MAP, DELEGATOR_REWARD_PURSE, ERA_ID_KEY,
+        ERA_VALIDATORS_KEY, INITIAL_ERA_ID, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
+        UNBONDING_PURSES_KEY, VALIDATOR_REWARD_MAP, VALIDATOR_REWARD_PURSE,
     },
     contracts::{NamedKeys, CONTRACT_INITIAL_VERSION},
     runtime_args,
@@ -46,15 +47,19 @@ pub extern "C" fn install() {
         let genesis_validators: BTreeMap<PublicKey, U512> =
             runtime::get_named_arg(ARG_GENESIS_VALIDATORS);
 
+        // Initial bid purses calculated based on founder validator stakes
+        let mut bid_purses = BidPurses::new();
+
         // List of validators for initial era.
         let mut initial_validator_weights = ValidatorWeights::new();
 
-        for (validator_account_hash, amount) in genesis_validators {
+        for (validator_public_key, amount) in genesis_validators {
             let bonding_purse = create_purse(mint_package_hash, amount);
             let founding_validator =
                 Bid::new_locked(bonding_purse, amount, DEFAULT_LOCKED_FUNDS_PERIOD);
-            validators.insert(validator_account_hash, founding_validator);
-            initial_validator_weights.insert(validator_account_hash, amount);
+            validators.insert(validator_public_key, founding_validator);
+            initial_validator_weights.insert(validator_public_key, amount);
+            bid_purses.insert(validator_public_key, bonding_purse);
         }
 
         let initial_snapshot_range = INITIAL_ERA_ID..=INITIAL_ERA_ID + AUCTION_DELAY;
@@ -86,13 +91,26 @@ pub extern "C" fn install() {
             ERA_VALIDATORS_KEY.into(),
             storage::new_uref(era_validators).into(),
         );
-        named_keys.insert(
-            BID_PURSES_KEY.into(),
-            storage::new_uref(BidPurses::new()).into(),
-        );
+        named_keys.insert(BID_PURSES_KEY.into(), storage::new_uref(bid_purses).into());
         named_keys.insert(
             UNBONDING_PURSES_KEY.into(),
             storage::new_uref(UnbondingPurses::new()).into(),
+        );
+        named_keys.insert(
+            DELEGATOR_REWARD_PURSE.into(),
+            create_purse(mint_package_hash, U512::zero()).into(),
+        );
+        named_keys.insert(
+            VALIDATOR_REWARD_PURSE.into(),
+            create_purse(mint_package_hash, U512::zero()).into(),
+        );
+        named_keys.insert(
+            DELEGATOR_REWARD_MAP.into(),
+            storage::new_uref(DelegatorRewardMap::new()).into(),
+        );
+        named_keys.insert(
+            VALIDATOR_REWARD_MAP.into(),
+            storage::new_uref(ValidatorRewardMap::new()).into(),
         );
 
         named_keys

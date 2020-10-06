@@ -132,8 +132,7 @@ steps:
 - name: build-deb-tag
   <<: *buildenv
   commands:
-    - "cd grpc/server && cargo deb -p casper-engine-grpc-server --no-build"
-    - "cd node && cargo deb -p casper-node --no-build"
+    - "make deb"
   depends_on:
   - build-release-tag
 
@@ -176,8 +175,15 @@ trigger:
   - refs/tags/v*
 
 ---
+# Anchor for default buildenv
+__buildenv: &buildenv
+  image: "casperlabs/buildenv:latest"
+  environment:
+    CARGO_HOME: ".cargo"
+
+# when we agree release flow, we will move publish step to main pipeline. Instead of keeping this one. 
 kind: pipeline
-name: bintray-tests
+name: bintray-publish-testing
 
 steps:
 - name: restore-cache-tag
@@ -194,34 +200,49 @@ steps:
       - ./.cargo/.crates.toml
     restore: true
 
-- name: build-release-tag
+- name: cargo-fmt
   <<: *buildenv
   commands:
-  - "cargo build --release"
-  depends_on:
-  - restore-cache-tag
+  - rustup component add rustfmt
+  - cargo fmt --all -- --check
 
-- name: build-deb-tag
+- name: cargo-clippy
   <<: *buildenv
-  commands:
-    - "cd grpc/server && cargo deb -p casper-engine-grpc-server --no-build"
-    - "cd node && cargo deb -p casper-node --no-build"
-  depends_on:
-  - build-release-tag
-
-- name: publish-bintray-tag
-  <<: *buildenv
-  commands:
-  - "./upload.sh"
   environment:
-    BINTRAY_API_KEY:
-      from_secret: cl_bintray_api_key
+    RUSTFLAGS: '-D warnings'
+  commands:
+  - make setup-rs
+  - rustup component add clippy
+  - cargo clippy --all-targets --all-features --workspace
+
+- name: cargo-audit
+  <<: *buildenv
+  commands:
+  - cargo install cargo-audit
+  - cargo generate-lockfile
+  - cargo audit
+  depends_on:
+  - cargo-clippy
+
+- name: build-deb-master
+  <<: *buildenv
+  commands:
+    - "make setup-rs"
+    - "make deb"
+  depends_on:
+  - cargo-audit
+
+- name: publish-test-bintray-master
+  <<: *buildenv
+  commands:
+  - "./upload.sh --repo-name casper-debian-tests --package-name casper-node"
+  environment:
     CL_VAULT_TOKEN:
       from_secret: vault_token
     CL_VAULT_HOST:
       from_secret: vault_host
   depends_on:
-  - build-deb-tag
+  - build-deb-master
 
 volumes:
   - name: cache
@@ -231,6 +252,10 @@ volumes:
 trigger:
   branch:
   - OP-1540
+  - OP-1540-new
+  event:
+  - push
+  - pull_request
 
 ---
 kind: pipeline

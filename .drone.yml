@@ -91,6 +91,25 @@ steps:
     event:
     - push
 
+- name: build-deb-master
+  <<: *buildenv
+  commands:
+    - "make deb"
+  depends_on:
+  - rebuild-cache
+
+- name: publish-test-bintray-master
+  <<: *buildenv
+  commands:
+  - "./upload.sh --repo-name casper-debian-tests --package-name casper-node"
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
+  depends_on:
+  - build-deb-master
+
 volumes:
   - name: cache
     host:

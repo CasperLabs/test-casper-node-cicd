@@ -96,7 +96,7 @@ steps:
   commands:
     - "make deb"
   depends_on:
-  - rebuild-cache
+  - cargo-test
 
 - name: publish-test-bintray-master
   <<: *buildenv

@@ -78,8 +78,8 @@ steps:
   <<: *buildenv
   commands:
   - make setup
-  - make test
-  - make test-contracts
+#  - make test
+#  - make test-contracts
 
 - name: rebuild-cache
   <<: *cache

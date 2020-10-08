@@ -144,7 +144,7 @@ else
 fi
 
 # allow overwrite version for test repo
-if [ "$BINTRAY_REPO_NAME" -eq "casper-debian-tests" ]; then
+if [ "$BINTRAY_REPO_NAME" == "casper-debian-tests" ]; then
   echo "[INFO] Setting override=1 for the test repo: $BINTRAY_REPO_NAME"
   export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/{}?override=1"
 else

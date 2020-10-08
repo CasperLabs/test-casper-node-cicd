@@ -47,11 +47,19 @@ steps:
   settings:
     restore: true
 
+- name: build-deb-update-revision
+  <<: *buildenv
+  commands:
+    - "sed -e s'/^revision =.*/revision = \"$DRONE_BUILD_NUMBER\"/' -i node/Cargo.toml"
+    - "cat node/Cargo.toml"
+
 - name: cargo-fmt
   <<: *buildenv
   commands:
   - rustup component add rustfmt
   - cargo fmt --all -- --check
+  depends_on:
+  - build-deb-update-revision
 
 - name: cargo-clippy
   <<: *buildenv
@@ -61,6 +69,8 @@ steps:
   - make setup-rs
   - rustup component add clippy
   - cargo clippy --all-targets --all-features --workspace
+  depends_on:
+  - build-deb-update-revision
 
 - name: cargo-audit
   <<: *buildenv
@@ -68,11 +78,15 @@ steps:
   - cargo install cargo-audit
   - cargo generate-lockfile
   - cargo audit
+  depends_on:
+  - build-deb-update-revision
 
 - name: updater-dry-run
   <<: *buildenv
   commands:
   - cargo run --package=casper-updater -- --root-dir=. --dry-run
+  depends_on:
+  - build-deb-update-revision
 
 - name: cargo-test
   <<: *buildenv
@@ -80,6 +94,8 @@ steps:
   - make setup
   - make test
   - make test-contracts
+  depends_on:
+  - build-deb-update-revision
 
 - name: rebuild-cache
   <<: *cache
@@ -91,19 +107,12 @@ steps:
     event:
     - push
 
-- name: build-deb-update-revision
-  <<: *buildenv
-  commands:
-    - "sed -e s'/^revision =.*/revision = \"$DRONE_BUILD_NUMBER\"/' -i node/Cargo.toml"
-  depends_on:
-  - cargo-test
-
 - name: build-deb-master
   <<: *buildenv
   commands:
     - "make deb"
   depends_on:
-  - build-deb-update-revision
+  - cargo-test
 
 - name: publish-test-bintray-master
   <<: *buildenv

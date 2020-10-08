@@ -50,8 +50,7 @@ steps:
 - name: build-deb-update-revision
   <<: *buildenv
   commands:
-    - "sed -i s\"/^revision =.*/revision = \"${DRONE_BUILD_NUMBER}\"/\" node/Cargo.toml"
-    - "cat node/Cargo.toml"
+    - "./update-rev.sh" 
 
 - name: cargo-fmt
   <<: *buildenv

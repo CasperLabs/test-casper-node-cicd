@@ -91,12 +91,19 @@ steps:
     event:
     - push
 
+- name: build-deb-update-revision
+  <<: *buildenv
+  commands:
+    - "sed -e s'/^revision =.*/revision = \"$DRONE_BUILD_NUMBER\"/' -i node/Cargo.toml"
+  depends_on:
+  - cargo-test
+
 - name: build-deb-master
   <<: *buildenv
   commands:
     - "make deb"
   depends_on:
-  - cargo-test
+  - build-deb-update-revision
 
 - name: publish-test-bintray-master
   <<: *buildenv

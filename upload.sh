@@ -143,8 +143,16 @@ else
   exit 1
 fi
 
+# allow overwrite version for test repo
+if [ "$BINTRAY_REPO_NAME" -eq "casper-debian-tests" ]; then
+  echo "[INFO] Setting override=1 for the test repo: $BINTRAY_REPO_NAME"
+  export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/{}?override=1"
+else
+  export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/{}"
+fi
+
 echo "Uploading file to bintray:${PACKAGE_VERSION} ..."
-echo -e "\nDEBIAN" && find . -maxdepth 1 -type f -iregex ".*casper-node.*\\.deb" -printf "%f\n" | xargs -I {} sh -c "echo Attempting to upload [{}] && curl -T {} -u$BINTRAY_USER:$BINTRAY_API_KEY $API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/{} && echo"
+echo -e "\nDEBIAN" && find . -maxdepth 1 -type f -iregex ".*casper-node.*\\.deb" -printf "%f\n" | xargs -I {} sh -c "echo Attempting to upload [{}] && curl -T {} -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL && echo"
 
 sleep 5 && echo -e "\nPublishing CL Packages on bintray..."
 curl -s -X POST -u$BINTRAY_USER:$BINTRAY_API_KEY $API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/publish

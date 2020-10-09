@@ -124,82 +124,82 @@ trigger:
   - trying
   - staging
 
----
-# Anchor for default buildenv
-__buildenv: &buildenv
-  image: "casperlabs/buildenv:latest"
-  environment:
-    CARGO_HOME: ".cargo"
-
-kind: pipeline
-name: on-tag
-
-steps:
-- name: restore-cache-tag
-  image: drillster/drone-volume-cache
-  volumes:
-  - name: cache
-    path: /cache
-  settings:
-    mount:
-      - ./.cargo/bin/
-      - ./.cargo/registry/index/
-      - ./.cargo/registry/cache/
-      - ./.cargo/git/db/
-      - ./.cargo/.crates.toml
-    restore: true
-
-- name: build-release-tag
-  <<: *buildenv
-  commands:
-  - "cargo build --release"
-  depends_on:
-  - restore-cache-tag
-
-- name: build-deb-tag
-  <<: *buildenv
-  commands:
-    - "make deb"
-  depends_on:
-  - build-release-tag
-
-- name: publish-github-tag
-  image: plugins/github-release
-  settings:
-    api_key:
-      from_secret: github_token
-    checksum:
-    - sha256
-    - md5
-    files:
-    - "./target/debian/*.deb"
-    prerelease:
-    - true
-  depends_on:
-  - build-deb-tag
-
-- name: publish-crate-tag
-  <<: *buildenv
-  commands:
-  - "echo TODO"
-  depends_on:
-  - build-release-tag
-
-- name: publish-bintray-tag
-  <<: *buildenv
-  commands:
-  - "echo TODO"
-  depends_on:
-  - build-deb-tag
-
-volumes:
-  - name: cache
-    host:
-      path: /tmp/cache
-
-trigger:
-  ref:
-  - refs/tags/v*
+#---
+## Anchor for default buildenv
+#__buildenv: &buildenv
+#  image: "casperlabs/buildenv:latest"
+#  environment:
+#    CARGO_HOME: ".cargo"
+#
+#kind: pipeline
+#name: on-tag
+#
+#steps:
+#- name: restore-cache-tag
+#  image: drillster/drone-volume-cache
+#  volumes:
+#  - name: cache
+#    path: /cache
+#  settings:
+#    mount:
+#      - ./.cargo/bin/
+#      - ./.cargo/registry/index/
+#      - ./.cargo/registry/cache/
+#      - ./.cargo/git/db/
+#      - ./.cargo/.crates.toml
+#    restore: true
+#
+#- name: build-release-tag
+#  <<: *buildenv
+#  commands:
+#  - "cargo build --release"
+#  depends_on:
+#  - restore-cache-tag
+#
+#- name: build-deb-tag
+#  <<: *buildenv
+#  commands:
+#    - "make deb"
+#  depends_on:
+#  - build-release-tag
+#
+#- name: publish-github-tag
+#  image: plugins/github-release
+#  settings:
+#    api_key:
+#      from_secret: github_token
+#    checksum:
+#    - sha256
+#    - md5
+#    files:
+#    - "./target/debian/*.deb"
+#    prerelease:
+#    - true
+#  depends_on:
+#  - build-deb-tag
+#
+#- name: publish-crate-tag
+#  <<: *buildenv
+#  commands:
+#  - "echo TODO"
+#  depends_on:
+#  - build-release-tag
+#
+#- name: publish-bintray-tag
+#  <<: *buildenv
+#  commands:
+#  - "echo TODO"
+#  depends_on:
+#  - build-deb-tag
+#
+#volumes:
+#  - name: cache
+#    host:
+#      path: /tmp/cache
+#
+#trigger:
+#  ref:
+#  - refs/tags/v*
 
 ---
 # Anchor for default buildenv
@@ -260,7 +260,7 @@ steps:
   depends_on:
   - cargo-clippy
 
-- name: build-deb-master
+- name: build-deb
   <<: *buildenv
   commands:
     - "make setup-rs"
@@ -279,7 +279,7 @@ steps:
     CL_VAULT_HOST:
       from_secret: vault_host
   depends_on:
-  - build-deb-master
+  - build-deb
 
 # publish to prod only on tag
 - name: publish-prod-bintray
@@ -292,10 +292,29 @@ steps:
     CL_VAULT_HOST:
       from_secret: vault_host
   depends_on:
-  - build-deb-master
+  - build-deb
   when:
     ref:
     - refs/tags/v*
+
+- name: publish-github-tag
+  image: plugins/github-release
+  settings:
+    api_key:
+      from_secret: github_token
+    checksum:
+    - sha256
+    - md5
+    files:
+    - "./target/debian/*.deb"
+    prerelease:
+    - true
+  depends_on:
+  - build-deb
+  when:
+    ref:
+    - refs/tags/v*
+
 
 volumes:
   - name: cache

@@ -164,7 +164,7 @@ sleep 5 && echo -e "\nPublishing GPG Signatures on bintray..."
 curl -s -X POST -u$BINTRAY_USER:$BINTRAY_API_KEY $API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/publish
 
 sleep 5 && echo -e "\nCalculating repo metadata on bintray..."
-curl -s -X POST -u$BINTRAY_USER:$BINTRAY_API_KEY -H "Content-Type: application/json" --data '{"private_key": "'$BINTRAY_PK'", "passphrase": "'$BINTRAY_GPG_PASSPHRASE'"}' $API_URL/calc_metadata/$BINTRAY_REPO_URL/${PACKAGE_VERSION}
+curl -s -X POST -u$BINTRAY_USER:$BINTRAY_API_KEY -H "Content-Type: application/json" --data "@$CREDENTIAL_FILE" $API_URL/calc_metadata/$BINTRAY_REPO_URL/versions/${PACKAGE_VERSION}
 
 echo -e "\n Fetch meta data for uploaded files"
 TEMP_DEB_FILE=uploaded_contents_debian_${PACKAGE_VERSION}.json

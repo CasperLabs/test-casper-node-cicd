@@ -123,6 +123,7 @@ trigger:
   - master
   - trying
   - staging
+  - "release-*"
 
 #---
 ## Anchor for default buildenv
@@ -210,7 +211,7 @@ __buildenv: &buildenv
 
 # when we agree release flow, we will move publish step to main pipeline. Instead of keeping this one. 
 kind: pipeline
-name: release
+name: deploy-to-test-repo
 
 steps:
 - name: restore-cache-tag
@@ -315,22 +316,118 @@ steps:
     ref:
     - refs/tags/v*
 
+volumes:
+  - name: cache
+    host:
+      path: /tmp/cache
+# push to test repo every time we are going to merge to master (via staging), trying or pushing to release (hot fix)
+trigger:
+  branch:
+  - trying
+  - staging
+  - "release-*"
+  event:
+  - push
+
+---
+# act on release - when the tag is created
+kind: pipeline
+name: deploy-to-test-repo
+
+steps:
+- name: restore-cache-tag
+  image: drillster/drone-volume-cache
+  volumes:
+  - name: cache
+    path: /cache
+  settings:
+    mount:
+      - ./.cargo/bin/
+      - ./.cargo/registry/index/
+      - ./.cargo/registry/cache/
+      - ./.cargo/git/db/
+      - ./.cargo/.crates.toml
+    restore: true
+
+- name: update-revision
+  <<: *buildenv
+  commands:
+    - "./update-rev.sh"
+
+- name: cargo-fmt
+  <<: *buildenv
+  commands:
+  - rustup component add rustfmt
+  - cargo fmt --all -- --check
+  depends_on:
+    - update-revision
+
+- name: cargo-clippy
+  <<: *buildenv
+  environment:
+    RUSTFLAGS: '-D warnings'
+  commands:
+  - make setup-rs
+  - rustup component add clippy
+  - cargo clippy --all-targets --all-features --workspace
+  depends_on:
+    - update-revision
+
+- name: cargo-audit
+  <<: *buildenv
+  commands:
+  - cargo install cargo-audit
+  - cargo generate-lockfile
+  - cargo audit
+  depends_on:
+  - cargo-clippy
+
+- name: build-deb
+  <<: *buildenv
+  commands:
+    - "make setup-rs"
+    - "make deb"
+  depends_on:
+  - cargo-audit
+
+- name: publish-prod-bintray
+  <<: *buildenv
+  commands:
+  - "./upload.sh --repo-name casper-debian-tests --package-name casper-node"
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
+  depends_on:
+  - build-deb
+
+- name: publish-github-pre-release
+  image: plugins/github-release
+  settings:
+    api_key:
+      from_secret: github_token
+    checksum:
+    - sha256
+    - md5
+    files:
+    - "./target/debian/*.deb"
+    prerelease:
+    - true
+  depends_on:
+  - build-deb
+  when:
+    ref:
+    - refs/tags/v*
 
 volumes:
   - name: cache
     host:
       path: /tmp/cache
-
+# push to test repo every time we are going to merge to master (via staging), trying or pushing to release (hot fix)
 trigger:
-  branch:
-  - OP-1540
-  - OP-1540-new
-  - trying
-  - staging
-  - release-*
-  event:
-  - push
-
+  ref:
+  - refs/tags/v*
 ---
 kind: pipeline
 name: failed-build-alert
@@ -357,7 +454,7 @@ trigger:
   - master
   - trying
   - staging
-  - release-*
+  - "release-*"
 
 depends_on:
 - cargo

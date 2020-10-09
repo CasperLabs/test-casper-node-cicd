@@ -330,9 +330,14 @@ trigger:
   - push
 
 ---
+# Anchor for default buildenv
+__buildenv: &buildenv
+  image: "casperlabs/buildenv:latest"
+  environment:
+    CARGO_HOME: ".cargo"
 # act on release - when the tag is created
 kind: pipeline
-name: deploy-to-test-repo
+name: release-by-tag
 
 steps:
 - name: restore-cache-tag

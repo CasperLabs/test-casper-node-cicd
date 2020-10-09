@@ -113,18 +113,6 @@ steps:
   depends_on:
   - cargo-test
 
-- name: publish-test-bintray-master
-  <<: *buildenv
-  commands:
-  - "./upload.sh --repo-name casper-debian-tests --package-name casper-node"
-  environment:
-    CL_VAULT_TOKEN:
-      from_secret: vault_token
-    CL_VAULT_HOST:
-      from_secret: vault_host
-  depends_on:
-  - build-deb-master
-
 volumes:
   - name: cache
     host:
@@ -222,7 +210,7 @@ __buildenv: &buildenv
 
 # when we agree release flow, we will move publish step to main pipeline. Instead of keeping this one. 
 kind: pipeline
-name: bintray-publish-testing
+name: release
 
 steps:
 - name: restore-cache-tag
@@ -239,11 +227,18 @@ steps:
       - ./.cargo/.crates.toml
     restore: true
 
+- name: update-revision
+  <<: *buildenv
+  commands:
+    - "./update-rev.sh"
+
 - name: cargo-fmt
   <<: *buildenv
   commands:
   - rustup component add rustfmt
   - cargo fmt --all -- --check
+  depends_on:
+    - update-revision
 
 - name: cargo-clippy
   <<: *buildenv
@@ -253,6 +248,8 @@ steps:
   - make setup-rs
   - rustup component add clippy
   - cargo clippy --all-targets --all-features --workspace
+  depends_on:
+    - update-revision
 
 - name: cargo-audit
   <<: *buildenv
@@ -271,7 +268,8 @@ steps:
   depends_on:
   - cargo-audit
 
-- name: publish-test-bintray-master
+# we want to publish to the test repo, every time event for the release. 
+- name: publish-test-bintray
   <<: *buildenv
   commands:
   - "./upload.sh --repo-name casper-debian-tests --package-name casper-node"
@@ -283,6 +281,22 @@ steps:
   depends_on:
   - build-deb-master
 
+# publish to prod only on tag
+- name: publish-prod-bintray
+  <<: *buildenv
+  commands:
+  - "./upload.sh --repo-name debian --package-name casper-node"
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
+  depends_on:
+  - build-deb-master
+  when:
+    ref:
+    - refs/tags/v*
+
 volumes:
   - name: cache
     host:
@@ -292,9 +306,11 @@ trigger:
   branch:
   - OP-1540
   - OP-1540-new
+  - trying
+  - staging
+  - release-*
   event:
   - push
-  - pull_request
 
 ---
 kind: pipeline

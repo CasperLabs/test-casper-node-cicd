@@ -297,7 +297,7 @@ steps:
     ref:
     - refs/tags/v*
 
-- name: publish-github-tag
+- name: publish-github-pre-release
   image: plugins/github-release
   settings:
     api_key:
@@ -357,6 +357,7 @@ trigger:
   - master
   - trying
   - staging
+  - release-*
 
 depends_on:
 - cargo

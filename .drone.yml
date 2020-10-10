@@ -106,7 +106,7 @@ steps:
     event:
     - push
 
-- name: build-deb-master
+- name: build-deb
   <<: *buildenv
   commands:
     - "make deb"

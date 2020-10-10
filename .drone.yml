@@ -222,12 +222,6 @@ trigger:
 #  ref:
 #  - refs/tags/v*
 
----
-# Anchor for default buildenv
-__buildenv: &buildenv
-  image: "casperlabs/buildenv:latest"
-  environment:
-    CARGO_HOME: ".cargo"
 
 ---
 # Anchor for default buildenv

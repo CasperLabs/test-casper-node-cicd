@@ -138,6 +138,7 @@ fi
 
 if [ -d "$UPLOAD_DIR" ]; then
   cd $UPLOAD_DIR
+  DEB_FILE="$PACKAGE_NAME_$PACKAGE_VERSION-86_amd64.deb"
 else
   echo "[ERROR] Not such dir: $UPLOAD_DIR"
   exit 1
@@ -146,13 +147,18 @@ fi
 # allow overwrite version for test repo
 if [ "$BINTRAY_REPO_NAME" == "casper-debian-tests" ]; then
   echo "[INFO] Setting override=1 for the test repo: $BINTRAY_REPO_NAME"
-  export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/{}?override=1"
+  export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/$DEB_FILE?override=1"
 else
-  export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/{}"
+  export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/$DEB_FILE"
 fi
 
 echo "Uploading file to bintray:${PACKAGE_VERSION} ..."
-echo -e "\nDEBIAN" && find . -maxdepth 1 -type f -iregex ".*$PACKAGE_NAME.*\\.deb" -printf "%f\n" | xargs -I {} sh -c "echo Attempting to upload [{}] && curl -T {} -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL && echo"
+if [ -f "$DEB_FILE" ]; then
+  curl -T $DEB_FILE -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL
+else
+  echo "[ERROR] Unable to find $DEB_FILE in $(pwd)"
+  exit 1
+fi
 
 sleep 5 && echo -e "\nPublishing CL Packages on bintray..."
 curl -s -X POST -u$BINTRAY_USER:$BINTRAY_API_KEY $API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/publish

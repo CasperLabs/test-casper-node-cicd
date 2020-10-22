@@ -2,7 +2,7 @@
 
 get_help() {
   echo -e "Usage: $0 --repo-name <NAME> --package-name <PACKAGE_NAME> [--package-version <VERSION>]\n"
-  echo -e "Example: $0 --repo-name debian --package-name casper-node\n"
+  echo -e "Example: $0 --repo-name debian --package-name [casper-node|casper-client]\n"
   echo "Note: If --package-version is not set DRONE_TAG will be used."
 }
 
@@ -152,7 +152,7 @@ else
 fi
 
 echo "Uploading file to bintray:${PACKAGE_VERSION} ..."
-echo -e "\nDEBIAN" && find . -maxdepth 1 -type f -iregex ".*casper-node.*\\.deb" -printf "%f\n" | xargs -I {} sh -c "echo Attempting to upload [{}] && curl -T {} -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL && echo"
+echo -e "\nDEBIAN" && find . -maxdepth 1 -type f -iregex ".*$PACKAGE_NAME.*\\.deb" -printf "%f\n" | xargs -I {} sh -c "echo Attempting to upload [{}] && curl -T {} -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL && echo"
 
 sleep 5 && echo -e "\nPublishing CL Packages on bintray..."
 curl -s -X POST -u$BINTRAY_USER:$BINTRAY_API_KEY $API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/publish
@@ -175,14 +175,14 @@ DEB_FILE_NAME=$(cat $TEMP_DEB_FILE | jq -r 'nth(1; .[] | select (.version == "'$
 
 DEB_ASC_FILE_NAME=$(cat $TEMP_DEB_FILE |  jq -r 'nth(0; .[] | select (.version == "'${PACKAGE_VERSION}'") ) | .path' )
 
-if [[ "$DEB_FILE_NAME" =~ casper-node.*.deb$ ]]; then
+if [[ "$DEB_FILE_NAME" =~ $PACKAGE_NAME.*.deb$ ]]; then
   echo "Found $DEB_FILE_NAME on bintray";
 else
   echo "[ERRROR] Unable to find uploaded packages on bintray - missing $DEB_FILE_NAME"
   exit 1
 fi
 
-if [[ "$DEB_ASC_FILE_NAME" =~ casper-node.*.deb.asc$ ]]; then
+if [[ "$DEB_ASC_FILE_NAME" =~ $PACKAGE_NAME.*.deb.asc$ ]]; then
   echo "Found $DEB_ASC_FILE_NAME on bintray";
 else
   echo "[ERRROR] Unable to find uploaded packages on bintray - missing $DEB_ASC_FILE_NAME"

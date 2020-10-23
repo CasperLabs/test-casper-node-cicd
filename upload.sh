@@ -138,7 +138,7 @@ fi
 
 if [ -d "$UPLOAD_DIR" ]; then
   cd $UPLOAD_DIR
-  DEB_FILE="$PACKAGE_NAME_$PACKAGE_VERSION-86_amd64.deb"
+  DEB_FILE="$BINTRAY_PACKAGE_NAME_$PACKAGE_VERSION-86_amd64.deb"
 else
   echo "[ERROR] Not such dir: $UPLOAD_DIR"
   exit 1
@@ -181,14 +181,14 @@ DEB_FILE_NAME=$(cat $TEMP_DEB_FILE | jq -r 'nth(1; .[] | select (.version == "'$
 
 DEB_ASC_FILE_NAME=$(cat $TEMP_DEB_FILE |  jq -r 'nth(0; .[] | select (.version == "'${PACKAGE_VERSION}'") ) | .path' )
 
-if [[ "$DEB_FILE_NAME" =~ $PACKAGE_NAME.*.deb$ ]]; then
+if [[ "$DEB_FILE_NAME" =~ $BINTRAY_PACKAGE_NAME.*.deb$ ]]; then
   echo "Found $DEB_FILE_NAME on bintray";
 else
   echo "[ERRROR] Unable to find uploaded packages on bintray - missing $DEB_FILE_NAME"
   exit 1
 fi
 
-if [[ "$DEB_ASC_FILE_NAME" =~ $PACKAGE_NAME.*.deb.asc$ ]]; then
+if [[ "$DEB_ASC_FILE_NAME" =~ $BINTRAY_PACKAGE_NAME.*.deb.asc$ ]]; then
   echo "Found $DEB_ASC_FILE_NAME on bintray";
 else
   echo "[ERRROR] Unable to find uploaded packages on bintray - missing $DEB_ASC_FILE_NAME"

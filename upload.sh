@@ -138,7 +138,7 @@ fi
 
 if [ -d "$UPLOAD_DIR" ]; then
   cd $UPLOAD_DIR
-  DEB_FILE="$BINTRAY_PACKAGE_NAME_$PACKAGE_VERSION-86_amd64.deb"
+  DEB_FILE="${BINTRAY_PACKAGE_NAME}_${PACKAGE_VERSION}-86_amd64.deb"
 else
   echo "[ERROR] Not such dir: $UPLOAD_DIR"
   exit 1

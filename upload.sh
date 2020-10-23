@@ -137,8 +137,8 @@ fi
 
 
 if [ -d "$UPLOAD_DIR" ]; then
-  cd $UPLOAD_DIR
   DEB_FILE="${BINTRAY_PACKAGE_NAME}_${PACKAGE_VERSION}-86_amd64.deb"
+  DEB_FILE_PATH="$UPLOAD_DIR/$DEB_FILE"
 else
   echo "[ERROR] Not such dir: $UPLOAD_DIR"
   exit 1
@@ -153,8 +153,8 @@ else
 fi
 
 echo "Uploading file to bintray:${PACKAGE_VERSION} ..."
-if [ -f "$DEB_FILE" ]; then
-  curl -T $DEB_FILE -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL
+if [ -f "$DEB_FILE_PATH" ]; then
+  curl -T $DEB_FILE_PATH -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL
 else
   echo "[ERROR] Unable to find $DEB_FILE in $(pwd)"
   exit 1

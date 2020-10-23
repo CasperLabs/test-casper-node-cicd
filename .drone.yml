@@ -114,7 +114,7 @@ steps:
   - cargo-test
 
 - name: debug-step
-  <<: *buildend
+  <<: *buildenv
   commands:
     - "ls -al /drone/src/target/debian"
     - "ls -alR /drone/src/target"

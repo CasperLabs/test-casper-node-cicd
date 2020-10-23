@@ -137,7 +137,7 @@ fi
 
 
 if [ -d "$UPLOAD_DIR" ]; then
-  DEB_FILE="${BINTRAY_PACKAGE_NAME}_${PACKAGE_VERSION}-86_amd64.deb"
+  DEB_FILE="${BINTRAY_PACKAGE_NAME}_${PACKAGE_VERSION}-${DRONE_BUILD_NUMBER}_amd64.deb"
   DEB_FILE_PATH="$UPLOAD_DIR/$DEB_FILE"
 else
   echo "[ERROR] Not such dir: $UPLOAD_DIR"
@@ -152,11 +152,11 @@ else
   export BINTRAY_UPLOAD_URL="$API_URL/content/$BINTRAY_REPO_URL/${PACKAGE_VERSION}/$DEB_FILE"
 fi
 
-echo "Uploading file to bintray:${PACKAGE_VERSION} ..."
+echo "Uploading file ${DEB_FILE_PATH} to bintray:${PACKAGE_VERSION} ..."
 if [ -f "$DEB_FILE_PATH" ]; then
   curl -T $DEB_FILE_PATH -u$BINTRAY_USER:$BINTRAY_API_KEY $BINTRAY_UPLOAD_URL
 else
-  echo "[ERROR] Unable to find $DEB_FILE in $(pwd)"
+  echo "[ERROR] Unable to find $DEB_FILE_PATH in $(pwd)"
   exit 1
 fi
 

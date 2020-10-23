@@ -113,7 +113,7 @@ steps:
   depends_on:
   - cargo-test
 
-- name:
+- name: debug-step
   <<: *buildend
   commands:
     - "ls -al /drone/src/target/debian"

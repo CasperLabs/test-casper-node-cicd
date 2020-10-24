@@ -131,6 +131,7 @@ steps:
       from_secret: s3_artifacts_aws_secret_access_key
     source: /drone/src/s3_artifacts/**/*
     target: /wasm_contracts
+    region: us-east-2
   depends_on:
     - build-deb
 

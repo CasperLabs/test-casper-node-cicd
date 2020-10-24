@@ -113,11 +113,23 @@ steps:
   depends_on:
   - cargo-test
 
-- name: debug-step
+- name: build-wasm-package
   <<: *buildenv
   commands:
-    - "ls -al /drone/src/target/debian"
-    - "ls -alR /drone/src/target"
+    - "./build_wasm_package.sh"
+  depends_on:
+    - build-deb
+
+- name: push-wasm-package-to-s3-test
+  image: plugins/s3
+  settings:
+    bucket: casperlabs-cicd-artifacts
+    access_key:
+      from_secret: s3_artifacts_aws_access_key_id
+    secret_key:
+      from_secret: s3_artifacts_aws_secret_access_key
+    source: /drone/src/s3_artifacts/*
+    target: /
   depends_on:
     - build-deb
 

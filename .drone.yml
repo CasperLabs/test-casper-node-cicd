@@ -117,7 +117,6 @@ steps:
   <<: *buildenv
   commands:
     - "./build_wasm_package.sh"
-    - "ls -al /drone/src/s3_artifacts/"
   depends_on:
     - build-deb
 
@@ -132,7 +131,13 @@ steps:
       from_secret: s3_artifacts_aws_secret_access_key
     source: /drone/src/s3_artifacts/**/*
     target: /wasm_contracts
-    strip_prefix: drone/src/s3_artifacts/
+    strip_prefix: /drone/src/s3_artifacts/
+  when:
+    branch:
+    - master
+    - "release-*"
+    event:
+    - push  
   depends_on:
     - build-deb
 

@@ -125,13 +125,14 @@ steps:
   image: plugins/s3
   settings:
     bucket: casperlabs-cicd-artifacts
+    region: us-east-2
     access_key:
       from_secret: s3_artifacts_aws_access_key_id
     secret_key:
       from_secret: s3_artifacts_aws_secret_access_key
     source: /drone/src/s3_artifacts/**/*
     target: /wasm_contracts
-    region: us-east-2
+    strip_prefix: drone/src/s3_artifacts/
   depends_on:
     - build-deb
 

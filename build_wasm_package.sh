@@ -25,7 +25,7 @@ export CL_WASM_DIR="$RUN_DIR/target/wasm32-unknown-unknown/release"
 export CL_OUTPUT_S3_DIR="$RUN_DIR/s3_artifacts/${WASM_PACKAGE_VERSION}"
 export CL_WASM_PACKAGE="$CL_OUTPUT_S3_DIR/casper-contracts.tar.gz"
 export CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
-export CREDENTIAL_FILE_TMP="$RUN_DIR/vault_output.json"
+export CREDENTIAL_FILE_TMP="$RUN_DIR/s3_vault_output.json"
 export CL_S3_BUCKET='casperlabs-cicd-artifacts'
 export CL_S3_LOCATION="wasm_contracts/${WASM_PACKAGE_VERSION}"
 

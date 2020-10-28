@@ -54,6 +54,7 @@ if [ ! -f $CREDENTIAL_FILE_TMP ]; then
   exit 1
 else
   echo "[INFO] Found credentials file - $CREDENTIAL_FILE_TMP"
+  echo "[DEBUG] $(cat $CREDENTIAL_FILE_TMP)"
   # get just the body required by bintray, strip off vault payload
   export AWS_ACCESS_KEY_ID=$(/bin/cat $CREDENTIAL_FILE_TMP | jq -r .data.cicd_agent_to_s3.aws_access_key)
   export AWS_SECRET_ACCESS_KEY=$(/bin/cat $CREDENTIAL_FILE_TMP | jq -r .data.cicd_agent_to_s3.aws_secret_key)

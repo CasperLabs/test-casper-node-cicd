@@ -1,5 +1,4 @@
 #!/bin/bash
-set -ue
 
 abspath() {
   # generate absolute path from relative path
@@ -19,8 +18,10 @@ abspath() {
 }
 
 export RUN_DIR=$(dirname $(abspath $0))
+export RUN_DIR=/opt
 NODE_CONFIG_FILE="$RUN_DIR/node/Cargo.toml"
-export WASM_PACKAGE_VERSION="$(grep -oP "^version\s=\s\"\K(.*)\"" $NODE_CONFIG_FILE | sed -e s'/"//g')"
+# have to be sed instead of grep -oP to work in alpine docker image
+export WASM_PACKAGE_VERSION="$(grep ^version $NODE_CONFIG_FILE | sed -e s'/.*= "//' | sed -e s'/".*//')"
 export CL_WASM_DIR="$RUN_DIR/target/wasm32-unknown-unknown/release"
 export CL_OUTPUT_S3_DIR="$RUN_DIR/s3_artifacts/${WASM_PACKAGE_VERSION}"
 export CL_WASM_PACKAGE="$CL_OUTPUT_S3_DIR/casper-contracts.tar.gz"
@@ -29,17 +30,18 @@ export CREDENTIAL_FILE_TMP="$RUN_DIR/vault_output.json"
 export CL_S3_BUCKET='casperlabs-cicd-artifacts'
 export CL_S3_LOCATION="/wasm_contracts/${WASM_PACKAGE_VERSION}"
 
+echo "-H \"X-Vault-Token: $CL_VAULT_TOKEN\"" > ~/.curlrc
+
 if [ ! -d $CL_OUTPUT_S3_DIR ]; then
   mkdir -p "${CL_OUTPUT_S3_DIR}"
 fi
-
 # package all wasm files
 echo "[INFO] Checking if wasm files are ready under the path $CL_WASM_DIR"
 if [ -d "$CL_WASM_DIR" ]; then
   ls -al $CL_WASM_DIR/*wasm
-  echo "[INFO] Creating a tar.gz pacakge: $CL_WASM_DIR"
+  echo "[INFO] Creating a tar.gz package: $CL_WASM_PACKAGE"
   pushd $CL_WASM_DIR
-  tar zcvf $CL_WASM_PACKAGE *wasm
+  tar zvcf $CL_WASM_PACKAGE *wasm
   popd
 else
   echo "[ERROR] No wasm dir: $CL_WASM_DIR"
@@ -47,7 +49,7 @@ else
 fi
 
 # get aws credentials files
-curl -s -q -X GET $CL_VAULT_URL/ --output $CREDENTIAL_FILE_TMP
+curl -s -q -X GET $CL_VAULT_URL --output $CREDENTIAL_FILE_TMP
 if [ ! -f $CREDENTIAL_FILE_TMP ]; then
   echo "[ERROR] Unable to fetch aws credentials from vault: $CL_VAULT_URL"
   exit 1

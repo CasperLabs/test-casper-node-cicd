@@ -117,6 +117,11 @@ steps:
   image: casperlabs/s3cmd-build:latest
   commands:
     - "./build_wasm_package.sh"
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
   when:
     branch:
     - master

@@ -18,7 +18,6 @@ abspath() {
 }
 
 export RUN_DIR=$(dirname $(abspath $0))
-export RUN_DIR=/opt
 NODE_CONFIG_FILE="$RUN_DIR/node/Cargo.toml"
 # have to be sed instead of grep -oP to work in alpine docker image
 export WASM_PACKAGE_VERSION="$(grep ^version $NODE_CONFIG_FILE | sed -e s'/.*= "//' | sed -e s'/".*//')"

@@ -124,7 +124,7 @@ steps:
     event:
     - push  
   depends_on:
-    - build-deb
+  - build-deb
 
 # we want to publish to the test repo, only when code is pushed to master or release-* branch. 
 # bors should make sure, that it has passed on staging or trying branches

@@ -27,7 +27,7 @@ export CL_WASM_PACKAGE="$CL_OUTPUT_S3_DIR/casper-contracts.tar.gz"
 export CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
 export CREDENTIAL_FILE_TMP="$RUN_DIR/vault_output.json"
 export CL_S3_BUCKET='casperlabs-cicd-artifacts'
-export CL_S3_LOCATION="/wasm_contracts/${WASM_PACKAGE_VERSION}"
+export CL_S3_LOCATION="wasm_contracts/${WASM_PACKAGE_VERSION}"
 
 echo "-H \"X-Vault-Token: $CL_VAULT_TOKEN\"" > ~/.curlrc
 
@@ -60,6 +60,6 @@ else
   export AWS_SECRET_ACCESS_KEY=$(/bin/cat $CREDENTIAL_FILE_TMP | jq -r .data.cicd_agent_to_s3.aws_secret_key)
   echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
   echo "[INFO] Going to upload wasm package: ${CL_WASM_PACKAGE} to s3 bucket: s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
-  s3cmd put ${CL_WASM_PACKAGE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/
+  s3cmd put ${CL_WASM_PACKAGE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/casper-contracts.tar.gz
 fi
 

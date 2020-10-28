@@ -58,6 +58,7 @@ else
   # get just the body required by bintray, strip off vault payload
   export AWS_ACCESS_KEY_ID=$(/bin/cat $CREDENTIAL_FILE_TMP | jq -r .data.cicd_agent_to_s3.aws_access_key)
   export AWS_SECRET_ACCESS_KEY=$(/bin/cat $CREDENTIAL_FILE_TMP | jq -r .data.cicd_agent_to_s3.aws_secret_key)
+  echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
   echo "[INFO] Going to upload wasm package: ${CL_WASM_PACKAGE} to s3 bucket: s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
   s3cmd put ${CL_WASM_PACKAGE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/
 fi

@@ -44,7 +44,7 @@ steps:
   - name: check-for-files
     image: casperlabs/node-build-u1804
     commands:
-      - ll
+      - "ls -al"
 
 depends_on:
   - package

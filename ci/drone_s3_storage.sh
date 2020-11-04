@@ -54,23 +54,21 @@ if [[ " ${valid_commands[*]} " != *" $ACTION "* ]]; then
   exit 1
 fi
 
-if [[ "$ACTION" == "del" ]]; then
-  TARGET=$2
-  SOURCE="UNNEEDED"
-else
+if [[ "$ACTION" != "del" ]]; then
   SOURCE=$2
   TARGET=$3
+
+  if [ -z "$SOURCE" ]; then
+    echo "Source not provided"
+    exit 1
+  fi
+
+  if [ -z "$TARGET" ]; then
+    echo "Target not provided"
+    exit 1
+  fi
 fi
 
-if [ -z "$SOURCE" ]; then
-  echo "Source not provided"
-  exit 1
-fi
-
-if [ -z "$TARGET" ]; then
-  echo "Target not provided"
-  exit 1
-fi
 
 export CL_S3_BUCKET='casperlabs-cicd-artifacts'
 export CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"

@@ -1,3 +1,12 @@
+
+
+ #    a -> failure
+ #   /      \
+ # package   test
+ #  \        /
+ #   d _> on failure
+ #   |
+ #   publish
 ---
 kind: pipeline
 name: pre-checks
@@ -6,14 +15,8 @@ steps:
   - name: check-things
     image: casperlabs/node-build-u1804
     commands:
-      - mkdir "/tmp/$DRONE_BUILD_NUMBER"
-      - echo 'creating aaa-check-things file'
-      - touch "/tmp/$DRONE_BUILD_NUMBER/aaa-check-things"
-      - "ls -al /tmp/$DRONE_BUILD_NUMBER"
+      - echo 'Pre-checking!'
 
-volumes:
-  - name: tmp
-    path: "/tmp"
 ---
 kind: pipeline
 name: cargo-test
@@ -23,15 +26,11 @@ steps:
   image: casperlabs/node-build-u1804
   commands:
     - echo "creating aaa-cargo-test-simulate"
-    - touch "/tmp/$DRONE_BUILD_NUMBER/aaa-cargo-test-simulate"
-    - "ls -al /tmp/$DRONE_BUILD_NUMBER/"
+    - touch "aaa-cargo-test-simulate"
+    - ./ci/drone_s3_storage.sh put aaa-cargo-test-simulate /test_file/aaa-cargo-test-simulate
 
 depends_on:
   - pre-checks
-
-volumes:
-  - name: tmp
-    path: "/tmp"
 
 ---
 kind: pipeline
@@ -41,9 +40,9 @@ steps:
   - name: build-deb-simulate
     image: casperlabs/node-build-u1804
     commands:
-      - echo 'creating aaa-build-deb-simulate'
-      - touch /tmp/$DRONE_BUILD_NUMBER/aaa-build-deb-simulate
-      - "ls -al /tmp/$DRONE_BUILD_NUMBERS"
+      - echo "creating aaa-package-test-simulate"
+      - touch "aaa-package-test-simulate"
+      - ./ci/drone_s3_storage.sh put aaa-package-test-simulate /test_file/aaa-package-test-simulate
 
 depends_on:
   - pre-checks
@@ -60,13 +59,10 @@ steps:
   - name: check-for-files
     image: casperlabs/node-build-u1804
     commands:
-      - "ls -al /tmp/$DRONE_BUILD_NUMBERS"
+      - ./ci/drone_s3_storage.sh get /test_file/aaa-package-test-simulate aaa-package-test-simulate
+      - ./ci/drone_s3_storage.sh get /test_file/aaa-cargo-test-simulate aaa-cargo-test-simulate
+      - ls -al
 
 depends_on:
   - package
   - cargo-test
-
-volumes:
-  - name: tmp
-    path: "/tmp"
-

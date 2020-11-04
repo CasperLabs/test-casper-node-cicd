@@ -26,8 +26,8 @@ abspath() {
   fi
 }
 
-echo "$CL_VAULT_TOKEN"
-echo "$CL_VAULT_HOST"
+echo "${CL_VAULT_TOKEN}"
+echo "${CL_VAULT_HOST}"
 exit
 
 export RUN_DIR=$(dirname $(abspath $0))

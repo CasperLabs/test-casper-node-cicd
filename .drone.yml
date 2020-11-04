@@ -15,6 +15,11 @@ name: cargo-test
 steps:
 - name: cargo-test-simulate
   image: casperlabs/node-build-u1804
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
   commands:
     - echo "creating aaa-cargo-test-simulate"
     - touch "aaa-cargo-test-simulate"
@@ -30,6 +35,11 @@ name: package
 steps:
 - name: build-deb-simulate
   image: casperlabs/node-build-u1804
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
   commands:
   - echo "creating aaa-package-test-simulate"
   - touch "aaa-package-test-simulate"
@@ -45,6 +55,11 @@ name: diamond-bottom
 steps:
 - name: check-for-files
   image: casperlabs/node-build-u1804
+  environment:
+    CL_VAULT_TOKEN:
+      from_secret: vault_token
+    CL_VAULT_HOST:
+      from_secret: vault_host
   commands:
   - ./ci/drone_s3_storage.sh get /test_file/aaa-package-test-simulate aaa-package-test-simulate
   - ./ci/drone_s3_storage.sh get /test_file/aaa-cargo-test-simulate aaa-cargo-test-simulate

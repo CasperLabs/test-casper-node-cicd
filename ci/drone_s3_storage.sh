@@ -96,7 +96,7 @@ fi
 case "$ACTION" in
   "put")
     echo "put ${SOURCE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
-    s3cmd put "--include=${SOURCE}" "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
+    s3cmd put --include=* "${SOURCE}" "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
     ;;
   "get")
     echo "get s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${SOURCE} ${TARGET}"

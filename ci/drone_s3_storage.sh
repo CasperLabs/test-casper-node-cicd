@@ -8,6 +8,26 @@ set -ex
 # Making unique string for temp folder name in S3
 # Adding DRONE_REPO to DRONE_BUILD_NUMBER, because build is only unique per repo.
 # replacing the / in DRONE_REPO name with _ to not be path in S3
+
+abspath() {
+  # generate absolute path from relative path
+  # $1     : relative filename
+  # return : absolute path
+  if [ -d "$1" ]; then
+    # dir
+    (cd "$1"; pwd)
+  elif [ -f "$1" ]; then
+    # file
+    if [[ $1 == */* ]]; then
+      echo "$(cd "${1%/*}"; pwd)/${1##*/}"
+    else
+      echo "$(pwd)/$1"
+    fi
+  fi
+}
+
+export RUN_DIR=$(dirname $(abspath $0))
+
 DRONE_UNIQUE="${DRONE_BUILD_NUMBER}_${DRONE_REPO/\//_}"
 echo $DRONE_UNIQUE
 
@@ -52,10 +72,6 @@ if [ -z "$TARGET" ]; then
   exit 1
 fi
 
-export CL_OUTPUT_S3_DIR="$RUN_DIR/s3_artifacts/${WASM_PACKAGE_VERSION}"
-export CL_WASM_PACKAGE="$CL_OUTPUT_S3_DIR/casper-contracts.tar.gz"
-export CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
-export CREDENTIAL_FILE_TMP="$RUN_DIR/s3_vault_output.json"
 export CL_S3_BUCKET='casperlabs-cicd-artifacts'
 export CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"
 
@@ -66,6 +82,8 @@ if [ ! -d $CL_OUTPUT_S3_DIR ]; then
 fi
 
 # get aws credentials files
+export CREDENTIAL_FILE_TMP="$RUN_DIR/s3_vault_output.json"
+export CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
 curl -s -q -X GET $CL_VAULT_URL --output $CREDENTIAL_FILE_TMP
 if [ ! -f $CREDENTIAL_FILE_TMP ]; then
   echo "[ERROR] Unable to fetch aws credentials from vault: $CL_VAULT_URL"
@@ -78,7 +96,6 @@ else
   export AWS_SECRET_ACCESS_KEY=$(/bin/cat $CREDENTIAL_FILE_TMP | jq -r .data.cicd_agent_to_s3.aws_secret_key)
   echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
 fi
-
 
 case "$ACTION" in
   "put")

@@ -11,7 +11,6 @@ set -e
 # replacing the / in DRONE_REPO name with _ to not be path in S3
 DRONE_UNIQUE="${DRONE_BUILD_NUMBER}_${DRONE_REPO/\//_}"
 echo $DRONE_UNIQUE
-exit
 
 package="drone_s3_storage.sh"
 function help {

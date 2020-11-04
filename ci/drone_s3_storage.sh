@@ -106,7 +106,7 @@ case "$ACTION" in
     ;;
   "del")
     echo "del s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
-    s3cmd del "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
+    s3cmd del --recursive "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
     ;;
 esac
 

@@ -36,7 +36,7 @@ steps:
   commands:
   - echo "creating aaa-package-test-simulate"
   - touch "aaa-package-test-simulate"
-  - ./ci/drone_s3_storage.sh put ../resources resources
+  - ./ci/drone_s3_storage.sh put $(pwd)/resources resources
 
 depends_on:
   - pre-checks
@@ -54,9 +54,9 @@ steps:
     CL_VAULT_HOST:
       from_secret: vault_host
   commands:
-  - ./ci/drone_s3_storage.sh get resources ./resources
+  - ./ci/drone_s3_storage.sh get resources $(pwd)/dup_res
   - ./ci/drone_s3_storage.sh del
-  - ls -al ./resources
+  - ls -al $(pwd)/dup_res
 
 depends_on:
   - package

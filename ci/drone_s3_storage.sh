@@ -53,13 +53,6 @@ if [ -z "$TARGET" ]; then
   exit 1
 fi
 
-DRONE_UNIQUE=$("$RUN_DIR/drone_unique.sh")
-if [ -z "$DRONE_UNIQUE" ]; then
-  echo "DRONE_UNIQUE not created, unable to generate unique path in S3."
-  exit 1
-fi
-
-
 export CL_OUTPUT_S3_DIR="$RUN_DIR/s3_artifacts/${WASM_PACKAGE_VERSION}"
 export CL_WASM_PACKAGE="$CL_OUTPUT_S3_DIR/casper-contracts.tar.gz"
 export CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"

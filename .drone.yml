@@ -15,15 +15,8 @@ name: cargo-test
 steps:
 - name: cargo-test-simulate
   image: casperlabs/s3cmd-build:latest
-  environment:
-    CL_VAULT_TOKEN:
-      from_secret: vault_token
-    CL_VAULT_HOST:
-      from_secret: vault_host
   commands:
-    - echo "creating aaa-cargo-test-simulate"
-    - touch "aaa-cargo-test-simulate"
-    - ./ci/drone_s3_storage.sh put aaa-cargo-test-simulate test_file/aaa-cargo-test-simulate
+    - echo "testing"
 
 depends_on:
   - pre-checks
@@ -43,7 +36,7 @@ steps:
   commands:
   - echo "creating aaa-package-test-simulate"
   - touch "aaa-package-test-simulate"
-  - ./ci/drone_s3_storage.sh put aaa-package-test-simulate test_file/aaa-package-test-simulate
+  - ./ci/drone_s3_storage.sh put ../resources/* resources
 
 depends_on:
   - pre-checks
@@ -61,10 +54,9 @@ steps:
     CL_VAULT_HOST:
       from_secret: vault_host
   commands:
-  - ./ci/drone_s3_storage.sh get test_file/aaa-package-test-simulate aaa-package-test-simulate
-  - ./ci/drone_s3_storage.sh get test_file/aaa-cargo-test-simulate aaa-cargo-test-simulate
+  - ./ci/drone_s3_storage.sh get resources ./resources
   - ./ci/drone_s3_storage.sh del
-  - ls -al
+  - ls -al ./resources
 
 depends_on:
   - package

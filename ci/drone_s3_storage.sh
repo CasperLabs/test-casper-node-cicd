@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
-
+set -ex
 
 # This script allows uploading, downloading and purging of files to s3 for sharing between drone pipelines.
 #
@@ -83,15 +82,15 @@ fi
 
 case "$ACTION" in
   "put")
-    echo "put $SOURCE $TARGET"
+    echo "put ${SOURCE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
     s3cmd put "${SOURCE}" "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
     ;;
   "get")
-    echo "get $SOURCE $TARGET"
-    s3cmd put "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${SOURCE}" "${TARGET}"
+    echo "get s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${SOURCE} ${TARGET}"
+    s3cmd get "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${SOURCE}" "${TARGET}"
     ;;
   "del")
-    echo "del $DRONE_UNIQUE"
+    echo "del s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
     s3cmd del "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
     ;;
 esac

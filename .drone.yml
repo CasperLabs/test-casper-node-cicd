@@ -4,7 +4,7 @@ name: pre-checks
 
 steps:
 - name: check-things
-  image: casperlabs/node-build-u1804
+  image: casperlabs/s3cmd-build:latest
   commands:
   - echo 'Pre-checking!'
 
@@ -14,7 +14,7 @@ name: cargo-test
 
 steps:
 - name: cargo-test-simulate
-  image: casperlabs/node-build-u1804
+  image: casperlabs/s3cmd-build:latest
   environment:
     CL_VAULT_TOKEN:
       from_secret: vault_token
@@ -34,7 +34,7 @@ name: package
 
 steps:
 - name: build-deb-simulate
-  image: casperlabs/node-build-u1804
+  image: casperlabs/s3cmd-build:latest
   environment:
     CL_VAULT_TOKEN:
       from_secret: vault_token
@@ -54,7 +54,7 @@ name: diamond-bottom
 
 steps:
 - name: check-for-files
-  image: casperlabs/node-build-u1804
+  image: casperlabs/s3cmd-build:latest
   environment:
     CL_VAULT_TOKEN:
       from_secret: vault_token

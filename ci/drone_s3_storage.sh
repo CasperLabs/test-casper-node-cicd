@@ -29,7 +29,6 @@ abspath() {
 export RUN_DIR=$(dirname $(abspath $0))
 
 DRONE_UNIQUE="${DRONE_BUILD_NUMBER}_${DRONE_REPO/\//_}"
-echo $DRONE_UNIQUE
 
 package="drone_s3_storage.sh"
 function help {
@@ -69,7 +68,6 @@ if [[ "$ACTION" != "del" ]]; then
   fi
 fi
 
-
 export CL_S3_BUCKET='casperlabs-cicd-artifacts'
 export CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"
 
@@ -98,7 +96,7 @@ fi
 case "$ACTION" in
   "put")
     echo "put ${SOURCE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
-    s3cmd put "${SOURCE}" "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
+    s3cmd put "--include=${SOURCE}" "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"
     ;;
   "get")
     echo "get s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${SOURCE} ${TARGET}"
@@ -109,4 +107,3 @@ case "$ACTION" in
     s3cmd del --recursive "s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}"
     ;;
 esac
-

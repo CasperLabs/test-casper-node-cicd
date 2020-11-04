@@ -26,10 +26,6 @@ abspath() {
   fi
 }
 
-echo "${CL_VAULT_TOKEN}"
-echo "${CL_VAULT_HOST}"
-exit
-
 export RUN_DIR=$(dirname $(abspath $0))
 
 DRONE_UNIQUE="${DRONE_BUILD_NUMBER}_${DRONE_REPO/\//_}"

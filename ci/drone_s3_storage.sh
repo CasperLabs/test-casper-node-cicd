@@ -38,13 +38,11 @@ fi
 CL_S3_BUCKET='casperlabs-cicd-artifacts'
 CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"
 
-#echo "-H \"X-Vault-Token: $CL_VAULT_TOKEN\"" > ~/.curlrc
-
 # get aws credentials files
-CREDENTIAL_FILE_TMP="$RUN_DIR/s3_vault_output.json"
 TOKEN="-H \"X-Vault-Token: $CL_VAULT_TOKEN\""
 CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
-CREDENTIALS=$(curl -s -q "$TOKEN" -X GET "$CL_VAULT_URL")
+CREDENTIALS=$(curl -s -q -H "X-Vault-Token: $CL_VAULT_TOKEN" -X GET "$CL_VAULT_URL")
+echo "$CREDENTIALS"
 if [ ! -f "$CREDENTIALS" ]; then
   echo "[ERROR] Unable to fetch aws credentials from vault: $CL_VAULT_URL"
   exit 1

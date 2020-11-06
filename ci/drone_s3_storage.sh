@@ -40,10 +40,6 @@ CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"
 
 #echo "-H \"X-Vault-Token: $CL_VAULT_TOKEN\"" > ~/.curlrc
 
-if [ ! -d "$CL_OUTPUT_S3_DIR" ]; then
-  mkdir -p "${CL_OUTPUT_S3_DIR}"
-fi
-
 # get aws credentials files
 CREDENTIAL_FILE_TMP="$RUN_DIR/s3_vault_output.json"
 TOKEN="-H \"X-Vault-Token: $CL_VAULT_TOKEN\""

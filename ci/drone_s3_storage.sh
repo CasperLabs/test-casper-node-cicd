@@ -42,21 +42,14 @@ CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"
 TOKEN="-H \"X-Vault-Token: $CL_VAULT_TOKEN\""
 CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
 CREDENTIALS=$(curl -s -q -H "X-Vault-Token: $CL_VAULT_TOKEN" -X GET "$CL_VAULT_URL")
-echo "$CREDENTIALS"
-if [ ! -f "$CREDENTIALS" ]; then
-  echo "[ERROR] Unable to fetch aws credentials from vault: $CL_VAULT_URL"
-  exit 1
-else
-  echo "[INFO] Found credentials"
-  echo "[DEBUG] $CREDENTIALS"
-  # get just the body required by bintray, strip off vault payload
-  AWS_ACCESS_KEY_ID=$(echo "$CREDENTIALS" | jq -r .data.cicd_agent_to_s3.aws_access_key)
-  export AWS_ACCESS_KEY_ID
-  AWS_SECRET_ACCESS_KEY=$(echo "$CREDENTIAL_FILE_TMP" | jq -r .data.cicd_agent_to_s3.aws_secret_key)
-  export AWS_SECRET_ACCESS_KEY
-  echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
-  echo "AWS ACCESS : $AWS_SECRET_ACCESS_KEY"
-fi
+echo "[DEBUG] $CREDENTIALS"
+# get just the body required by bintray, strip off vault payload
+AWS_ACCESS_KEY_ID=$(echo "$CREDENTIALS" | jq -r .data.cicd_agent_to_s3.aws_access_key)
+export AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=$(echo "$CREDENTIAL_FILE_TMP" | jq -r .data.cicd_agent_to_s3.aws_secret_key)
+export AWS_SECRET_ACCESS_KEY
+echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
+echo "AWS ACCESS : $AWS_SECRET_ACCESS_KEY"
 
 exit
 case "$ACTION" in

@@ -46,12 +46,11 @@ echo "[DEBUG] $CREDENTIALS"
 # get just the body required by bintray, strip off vault payload
 AWS_ACCESS_KEY_ID=$(echo "$CREDENTIALS" | jq -r .data.cicd_agent_to_s3.aws_access_key)
 export AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY=$(echo "$CREDENTIAL_FILE_TMP" | jq -r .data.cicd_agent_to_s3.aws_secret_key)
+AWS_SECRET_ACCESS_KEY=$(echo "$CREDENTIALS" | jq -r .data.cicd_agent_to_s3.aws_secret_key)
 export AWS_SECRET_ACCESS_KEY
 echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
 echo "AWS ACCESS : $AWS_SECRET_ACCESS_KEY"
 
-exit
 case "$ACTION" in
   "put")
     echo "sync ${SOURCE} s3://${CL_S3_BUCKET}/${CL_S3_LOCATION}/${TARGET}"

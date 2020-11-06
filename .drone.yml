@@ -54,9 +54,10 @@ steps:
     CL_VAULT_HOST:
       from_secret: vault_host
   commands:
-  - ./ci/drone_s3_storage.sh get resources/ $(pwd)/dup_res/
-  - ./ci/drone_s3_storage.sh del
-  - ls -al $(pwd)/dup_res
+    - mkdir $(pwd)/dup_res
+    - ./ci/drone_s3_storage.sh get resources/ $(pwd)/dup_res/
+    - ./ci/drone_s3_storage.sh del
+    - ls -al $(pwd)/dup_res
 
 depends_on:
   - package

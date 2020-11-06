@@ -16,7 +16,7 @@ if [[ " ${valid_commands[*]} " != *" $ACTION "* ]]; then
   echo "Possible commands are:"
   echo " put <local source with ending /> <s3 target>"
   echo " get <s3 source with ending /> <local target>"
-  ecbo " del "
+  echo " del "
   exit 1
 fi
 
@@ -35,21 +35,19 @@ if [[ "$ACTION" != "del" ]]; then
   fi
 fi
 
-CL_S3_BUCKET='casperlabs-cicd-artifacts'
+CL_S3_BUCKET="casperlabs-cicd-artifacts"
 CL_S3_LOCATION="drone_temp/${DRONE_UNIQUE}"
 
+echo "${CL_VAULT_TOKEN}"
+echo "${CL_VAULT_HOST}"
 # get aws credentials files
-TOKEN="-H \"X-Vault-Token: $CL_VAULT_TOKEN\""
 CL_VAULT_URL="${CL_VAULT_HOST}/v1/sre/cicd/s3/aws_credentials"
 CREDENTIALS=$(curl -s -q -H "X-Vault-Token: $CL_VAULT_TOKEN" -X GET "$CL_VAULT_URL")
-echo "[DEBUG] $CREDENTIALS"
-# get just the body required by bintray, strip off vault payload
+# get just the body required by s3cmd, strip off vault payload
 AWS_ACCESS_KEY_ID=$(echo "$CREDENTIALS" | jq -r .data.cicd_agent_to_s3.aws_access_key)
 export AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY=$(echo "$CREDENTIALS" | jq -r .data.cicd_agent_to_s3.aws_secret_key)
 export AWS_SECRET_ACCESS_KEY
-echo "AWS ACCESS : $AWS_ACCESS_KEY_ID"
-echo "AWS ACCESS : $AWS_SECRET_ACCESS_KEY"
 
 case "$ACTION" in
   "put")
